@@ -496,7 +496,7 @@ if(WIN32)
 
   set_target_properties(dolphin-emu PROPERTIES
     DEBUG_POSTFIX    D
-    OUTPUT_NAME      Dolphin
+    OUTPUT_NAME      BetterWiiMenuDE
     WIN32_EXECUTABLE TRUE
   )
 
@@ -561,14 +561,18 @@ if(WIN32)
 endif()
 
 # Handle localization
-find_package(Gettext)
+if(NOT DISABLE_NLS)
+  find_package(Gettext)
 
-if(WIN32 AND NOT Gettext_FOUND)
-  message(STATUS "Using Gettext from Externals")
-  set(GETTEXT_MSGFMT_EXECUTABLE "${CMAKE_SOURCE_DIR}/Externals/gettext/msgfmt.exe")
+  if(WIN32 AND NOT Gettext_FOUND)
+    message(STATUS "Using Gettext from Externals")
+    set(GETTEXT_MSGFMT_EXECUTABLE "${CMAKE_SOURCE_DIR}/Externals/gettext/msgfmt.exe")
+  endif()
+else()
+  message(STATUS "NLS disabled, skipping localization")
 endif()
 
-if(GETTEXT_MSGFMT_EXECUTABLE)
+if(NOT DISABLE_NLS AND GETTEXT_MSGFMT_EXECUTABLE)
   set(pot_file "${CMAKE_SOURCE_DIR}/Languages/po/dolphin-emu.pot")
   file(GLOB LINGUAS ${CMAKE_SOURCE_DIR}/Languages/po/*.po)
 
