@@ -1,30 +1,22 @@
-// Copyright 2018 Dolphin Emulator Project
+// Copyright 2026 Dolphin Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
-
 #pragma once
-
-#include <string>
-
+#include <QString>
 #include <QThread>
-
-#include "UICommon/AutoUpdate.h"
-
-// Refer to docs/autoupdate_overview.md for a detailed overview of the autoupdate process
-
+#include <string>
 class QWidget;
-
-class Updater : public QThread, public AutoUpdateChecker
+// Checks fork releases only; never invokes the stock in-place updater.
+class Updater final : public QThread
 {
   Q_OBJECT
 public:
   explicit Updater(QWidget* parent, std::string update_track, std::string hash_override);
-
   void run() override;
-  void OnUpdateAvailable(const NewVersionInformation& info) override;
   void CheckForUpdate();
+signals:
+  void Result(const QString& tag, const QString& error);
 
 private:
-  QWidget* m_parent;
-  std::string m_update_track;
-  std::string m_hash_override;
+  bool m_enabled;
+  bool m_manual = false;
 };

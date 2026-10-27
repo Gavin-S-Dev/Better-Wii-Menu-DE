@@ -7,6 +7,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QSize>
+#include "Common/FileUtil.h"
 
 #include "DolphinQt/GameList/GameListModel.h"
 
@@ -34,6 +35,15 @@ QVariant GridProxyModel::data(const QModelIndex& i, int role) const
   {
     auto* model = static_cast<GameListModel*>(sourceModel());
 
+    if (model->GetGameFile(source_index.row())->IsWiiSystemMenu())
+    {
+      const bool cover = Config::Get(Config::MAIN_USE_GAME_COVERS);
+      const auto path = File::GetSysDirectory() +
+                        (cover ? "Resources/wii-menu-cover.svg" : "Resources/wii-menu-banner.svg");
+      return QPixmap(QString::fromStdString(path))
+          .scaled((cover ? QSize(160, 224) : LARGE_BANNER_SIZE) * model->GetScale(),
+                  Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
     const auto& buffer = model->GetGameFile(source_index.row())->GetCoverImage().buffer;
 
     QSize size = Config::Get(Config::MAIN_USE_GAME_COVERS) ? QSize(160, 224) : LARGE_BANNER_SIZE;
@@ -67,6 +77,8 @@ QVariant GridProxyModel::data(const QModelIndex& i, int role) const
                            Qt::KeepAspectRatio, Qt::SmoothTransformation);
     }
   }
+  if (role == Qt::ToolTipRole)
+    return sourceModel()->data(source_index, role);
   return QVariant();
 }
 
@@ -78,6 +90,10 @@ bool GridProxyModel::filterAcceptsRow(int source_row, const QModelIndex& source_
 
 bool GridProxyModel::lessThan(const QModelIndex& left, const QModelIndex& right) const
 {
+  const bool left_menu = left.data(GameListModel::WII_MENU_ROLE).toBool();
+  const bool right_menu = right.data(GameListModel::WII_MENU_ROLE).toBool();
+  if (left_menu != right_menu)
+    return sortOrder() == Qt::AscendingOrder ? left_menu : right_menu;
   if (left.data(GameListModel::SORT_ROLE) != right.data(GameListModel::SORT_ROLE))
     return QSortFilterProxyModel::lessThan(left, right);
 

@@ -23,6 +23,8 @@ namespace UICommon
 class GameFile;
 }
 
+class QTimer;
+
 class GameListModel final : public QAbstractTableModel
 {
   Q_OBJECT
@@ -44,6 +46,7 @@ public:
 
   // Using a custom sort role as it sometimes differs slightly from the default Qt::DisplayRole.
   static constexpr int SORT_ROLE = Qt::UserRole;
+  static constexpr int WII_MENU_ROLE = Qt::UserRole + 1;
 
   enum class Column
   {
@@ -91,6 +94,7 @@ private:
   int FindGameIndex(const std::string& path) const;
 
   void OnEmulationStateChanged(Core::State state);
+  void SyncForwarders();
 
   QStringList m_tag_list;
   QMap<QString, QVariant> m_game_tags;
@@ -101,4 +105,6 @@ private:
   TimePlayed m_timer;
   QString m_term;
   float m_scale = 1.0;
+  QTimer* m_sync_timer = nullptr;
+  bool m_syncing = false;
 };

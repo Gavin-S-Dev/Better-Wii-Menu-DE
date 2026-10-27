@@ -48,3 +48,8 @@ CMakeLists.txt.user
 .cache/clangd
 # Ignore CMake user presets
 CMakeUserPresets.json
+
+# Better Wii Menu DE local validation and release output
+/dist/
+/*.log
+**/__pycache__/

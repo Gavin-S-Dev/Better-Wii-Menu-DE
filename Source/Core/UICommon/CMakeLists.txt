@@ -1,10 +1,14 @@
 add_library(uicommon
-  AutoUpdate.cpp
+  # The stock update engine is intentionally not linked into the fork.
   AutoUpdate.h
   CommandLineParse.cpp
   CommandLineParse.h
   DiscordPresence.cpp
   DiscordPresence.h
+  ForkRelease.cpp
+  ForkRelease.h
+  ForkProfile.cpp
+  ForkProfile.h
   GameFile.cpp
   GameFile.h
   GameFileCache.cpp

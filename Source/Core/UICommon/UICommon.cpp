@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "UICommon/UICommon.h"
+#include <stdexcept>
+#include "UICommon/ForkProfile.h"
 
 #include <algorithm>
 #include <clocale>
@@ -385,14 +387,7 @@ void SetUserDirectory(std::string custom_path)
   {
     user_path = TStrToUTF8(appdata.get()) + DIR_SEP NORMAL_USER_DIR DIR_SEP;
 
-    // Set the UserConfigPath value in the registry for backwards compatibility with older Dolphin
-    // builds, which will look for the default User directory in Documents. If we set this key,
-    // they will use this as the User directory instead.
-    // (If we're in this case, then this key doesn't exist, so it's OK to set it.)
-    std::wstring wstr_path = UTF8ToWString(user_path);
-    RegSetKeyValueW(HKEY_CURRENT_USER, TEXT("Software\\Dolphin Emulator"), TEXT("UserConfigPath"),
-                    REG_SZ, wstr_path.c_str(),
-                    static_cast<DWORD>((wstr_path.size() + 1) * sizeof(wchar_t)));
+    // Discover the stock profile without modifying its registry settings.
   }
   else  // Case 6
   {
@@ -477,6 +472,16 @@ void SetUserDirectory(std::string custom_path)
       }
     }
 #endif
+  }
+#endif
+#ifdef _WIN32
+  if (!local && appdata_found)
+  {
+    const std::string fork_path = TStrToUTF8(appdata.get()) + DIR_SEP "Better Wii Menu DE";
+    std::string error;
+    if (PrepareForkProfile(user_path, fork_path, &error) == ForkProfileResult::Failed)
+      throw std::runtime_error("Better Wii Menu DE profile import failed: " + error);
+    user_path = fork_path + DIR_SEP;
   }
 #endif
   File::SetUserPath(D_USER_IDX, std::move(user_path));

@@ -1,0 +1,38 @@
+name: Better Wii Menu DE Windows
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Record upstream baseline
+        shell: pwsh
+        run: |
+          git fetch https://github.com/dolphin-emu/dolphin.git tag 2609a --no-tags
+          git show-ref --verify --quiet refs/heads/master
+          if ($LASTEXITCODE -ne 0) { git branch master refs/tags/2609a }
+      - name: Prepare local compiler and release runtime
+        run: python Tools/setup_fork_compiler.py
+      - name: Build application and tests
+        shell: cmd
+        run: build_fork.cmd
+      - name: Run regression suite
+        run: build-candidate/Binaries/Tests/tests.exe --gtest_output=xml:build-candidate/test-results.xml
+      - name: Package candidate
+        run: python Tools/package_fork.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: BetterWiiMenuDE-windows-candidate
+          path: |
+            dist/*.zip
+            dist/*.sha256
+            build-candidate/test-results.xml

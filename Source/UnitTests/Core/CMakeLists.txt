@@ -47,3 +47,4 @@ target_sources(PowerPCTest PRIVATE
   PowerPC/TestValues.h
   StubJit.h
 )
+add_dolphin_test(BetterWiiMenuTest BetterWiiMenuTest.cpp)

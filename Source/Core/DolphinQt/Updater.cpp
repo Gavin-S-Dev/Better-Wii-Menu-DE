@@ -1,119 +1,79 @@
-// Copyright 2018 Dolphin Emulator Project
+// Copyright 2026 Dolphin Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
-
 #include "DolphinQt/Updater.h"
+#include <QCoreApplication>
+#include <QDesktopServices>
+#include <QMessageBox>
+#include <QUrl>
+#include <QWidget>
+#include <chrono>
+#include "Common/BetterWiiMenu.h"
+#include "Common/HttpRequest.h"
+#include "UICommon/ForkRelease.h"
 
-#include <cstdlib>
-#include <utility>
-
-#include <QCheckBox>
-#include <QDialog>
-#include <QDialogButtonBox>
-#include <QLabel>
-#include <QPushButton>
-#include <QTextBrowser>
-#include <QVBoxLayout>
-
-#include "Common/Version.h"
-
-#include "DolphinQt/QtUtils/RunOnObject.h"
-#include "DolphinQt/Settings.h"
-
-// Refer to docs/autoupdate_overview.md for a detailed overview of the autoupdate process
-
-Updater::Updater(QWidget* parent, std::string update_track, std::string hash_override)
-    : m_parent(parent), m_update_track(std::move(update_track)),
-      m_hash_override(std::move(hash_override))
+Updater::Updater(QWidget* parent, std::string track, std::string) : m_enabled(!track.empty())
 {
   connect(this, &QThread::finished, this, &QObject::deleteLater);
+  connect(qApp, &QCoreApplication::aboutToQuit, this, [this] {
+    requestInterruption();
+    wait();
+  });
+  connect(this, &Updater::Result, parent, [this, parent](const QString& tag, const QString& error) {
+    if (!error.isEmpty())
+    {
+      if (m_manual)
+        QMessageBox::warning(parent, tr("Fork update check"), error);
+      return;
+    }
+    const auto remote = BetterWiiMenu::ParseVersion(tag.toStdString());
+    const auto current = BetterWiiMenu::ParseVersion(BetterWiiMenu::VERSION);
+    if (!remote || !current)
+      return;
+    if (*remote > *current)
+    {
+      QMessageBox box(QMessageBox::Information, tr("Better Wii Menu DE update"),
+                      tr("Better Wii Menu DE %1 is available.\nYou are running %2.\n\n"
+                         "Open the fork's releases page to download it?")
+                          .arg(tag, QString::fromLatin1(BetterWiiMenu::VERSION)),
+                      QMessageBox::Yes | QMessageBox::No, parent);
+      box.setTextFormat(Qt::PlainText);
+      if (box.exec() == QMessageBox::Yes)
+        QDesktopServices::openUrl(QUrl(QString::fromLatin1(BetterWiiMenu::RELEASES_URL)));
+    }
+    else if (m_manual)
+      QMessageBox::information(parent, tr("Fork update check"),
+                               tr("No newer stable Better Wii Menu DE release is available.\n"
+                                  "This build: %1; latest published release: %2.")
+                                   .arg(QString::fromLatin1(BetterWiiMenu::VERSION), tag));
+  });
 }
-
-void Updater::run()
-{
-  AutoUpdateChecker::CheckForUpdate(m_update_track, m_hash_override,
-                                    AutoUpdateChecker::CheckType::Automatic);
-}
-
 void Updater::CheckForUpdate()
 {
-  AutoUpdateChecker::CheckForUpdate(m_update_track, m_hash_override,
-                                    AutoUpdateChecker::CheckType::Manual);
+  m_manual = true;
+  start();
 }
-
-void Updater::OnUpdateAvailable(const NewVersionInformation& info)
+void Updater::run()
 {
-  if (std::getenv("DOLPHIN_UPDATE_SERVER_URL"))
+  if (!m_enabled && !m_manual)
+    return;
+  Common::HttpRequest request(std::chrono::seconds(10), [this](s64, s64 downloaded, s64, s64) {
+    return !isInterruptionRequested() && downloaded < 1024 * 1024;
+  });
+  auto response =
+      request.Get(BetterWiiMenu::RELEASES_API, {{"Accept", "application/vnd.github+json"},
+                                                {"User-Agent", "Better-Wii-Menu-DE"}});
+  if (!response)
   {
-    TriggerUpdate(info, AutoUpdateChecker::RestartMode::RESTART_AFTER_UPDATE);
-    RunOnObject(m_parent, [this] {
-      m_parent->close();
-      return 0;
-    });
+    emit Result({},
+                tr("Could not check fork releases. Check your connection and try again later."));
     return;
   }
-
-  bool later = false;
-
-  std::optional<int> choice = RunOnObject(m_parent, [&] {
-    QDialog* dialog = new QDialog(m_parent);
-    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
-    dialog->setWindowTitle(tr("Update available"));
-
-    auto* label = new QLabel(
-        tr("<h2>A new version of Dolphin is available!</h2>Dolphin %1 is available for "
-           "download. "
-           "You are running %2.<br> Would you like to update?<br><h4>Release Notes:</h4>")
-            .arg(QString::fromStdString(info.new_shortrev))
-            .arg(QString::fromStdString(Common::GetScmDescStr())));
-    label->setTextFormat(Qt::RichText);
-
-    auto* changelog = new QTextBrowser;
-
-    changelog->setHtml(QString::fromStdString(info.changelog_html));
-    changelog->setOpenExternalLinks(true);
-    changelog->setMinimumWidth(400);
-
-    auto* update_later_check = new QCheckBox(tr("Update after closing Dolphin"));
-
-    connect(update_later_check, &QCheckBox::toggled, [&](bool checked) { later = checked; });
-
-    auto* buttons = new QDialogButtonBox;
-
-    auto* never_btn =
-        buttons->addButton(tr("Never Auto-Update"), QDialogButtonBox::DestructiveRole);
-    buttons->addButton(tr("Remind Me Later"), QDialogButtonBox::RejectRole);
-    buttons->addButton(tr("Install Update"), QDialogButtonBox::AcceptRole);
-
-    auto* layout = new QVBoxLayout;
-    dialog->setLayout(layout);
-
-    layout->addWidget(label);
-    layout->addWidget(changelog);
-    layout->addWidget(update_later_check);
-    layout->addWidget(buttons);
-
-    connect(never_btn, &QPushButton::clicked, [dialog] {
-      Settings::Instance().SetAutoUpdateTrack(QString{});
-      dialog->reject();
-    });
-
-    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-
-    return dialog->exec();
-  });
-
-  if (choice && *choice == QDialog::Accepted)
+  const auto tag = UICommon::ParseForkRelease(
+      std::string_view(reinterpret_cast<const char*>(response->data()), response->size()));
+  if (!tag)
   {
-    TriggerUpdate(info, later ? AutoUpdateChecker::RestartMode::NO_RESTART_AFTER_UPDATE :
-                                AutoUpdateChecker::RestartMode::RESTART_AFTER_UPDATE);
-
-    if (!later)
-    {
-      RunOnObject(m_parent, [this] {
-        m_parent->close();
-        return 0;
-      });
-    }
+    emit Result({}, tr("The fork release service returned an invalid response. Try again later."));
+    return;
   }
+  emit Result(QString::fromStdString(*tag), {});
 }

@@ -366,6 +366,8 @@ void NetPlaySetupDialog::PopulateGameList()
   for (int i = 0; i < m_game_list_model.rowCount(QModelIndex()); i++)
   {
     std::shared_ptr<const UICommon::GameFile> game = m_game_list_model.GetGameFile(i);
+    if (game->IsWiiSystemMenu())
+      continue;
 
     auto* item =
         new QListWidgetItem(QString::fromStdString(m_game_list_model.GetNetPlayName(*game)));

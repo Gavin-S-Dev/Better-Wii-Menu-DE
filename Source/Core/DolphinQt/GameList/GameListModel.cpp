@@ -7,10 +7,18 @@
 #include <QFileInfo>
 #include <QPixmap>
 #include <QRegularExpression>
+#include <QTimer>
+#include "Common/BetterWiiMenu.h"
+#include "Common/FileUtil.h"
+
+#include "Common/Config/Config.h"
+#include "Common/Logging/Log.h"
 
 #include "Core/Config/MainSettings.h"
 #include "Core/Core.h"
+#include "Core/System.h"
 #include "Core/TimePlayed.h"
+#include "Core/WiiForwarder.h"
 
 #include "DiscIO/Enums.h"
 
@@ -40,7 +48,19 @@ GameListModel::GameListModel(QObject* parent) : QAbstractTableModel(parent)
   for (const QString& dir : Settings::Instance().GetPaths())
     m_tracker.AddDirectory(dir);
 
+  m_sync_timer = new QTimer(this);
+  m_sync_timer->setSingleShot(true);
+  m_sync_timer->setInterval(500);
+  connect(m_sync_timer, &QTimer::timeout, this, &GameListModel::SyncForwarders);
+  m_games.push_front(std::make_shared<UICommon::GameFile>(BetterWiiMenu::MENU_PATH));
   m_tracker.Start();
+  connect(&Settings::Instance(), &Settings::NANDRefresh, this, [this] {
+    if (!m_syncing)
+      QTimer::singleShot(0, this, &GameListModel::SyncForwarders);
+  });
+
+  connect(&Settings::Instance(), &Settings::WiiForwarderAutoSyncEnabled, this,
+          &GameListModel::SyncForwarders);
 
   connect(&Settings::Instance(), &Settings::ThemeChanged, [this] {
     // Tell the view to repaint. The signal 'dataChanged' also seems like it would work here, but
@@ -61,6 +81,21 @@ QVariant GameListModel::data(const QModelIndex& index, int role) const
     return QVariant();
 
   const UICommon::GameFile& game = *m_games[index.row()];
+
+  if (game.IsWiiSystemMenu() && role == Qt::ToolTipRole)
+    return tr("Open or set up the Wii System Menu.\nInstalled channels: %1 / 47 (the Disc Channel "
+              "uses one additional tile).")
+        .arg(WiiForwarder::CountVisibleChannels());
+  if (role == WII_MENU_ROLE)
+    return game.IsWiiSystemMenu();
+  if (game.IsWiiSystemMenu() && role == Qt::DecorationRole &&
+      static_cast<Column>(index.column()) == Column::Banner)
+  {
+    QPixmap banner(
+        QString::fromStdString(File::GetSysDirectory() + "Resources/wii-menu-banner.svg"));
+    banner.setDevicePixelRatio(5.0);
+    return banner;
+  }
 
   switch (static_cast<Column>(index.column()))
   {
@@ -283,6 +318,9 @@ bool GameListModel::ShouldDisplayGameListItem(int index) const
 {
   const UICommon::GameFile& game = *m_games[index];
 
+  if (game.IsWiiSystemMenu())
+    return true;
+
   if (!m_term.isEmpty())
   {
     const bool matches_title = QString::fromStdString(game.GetName(m_title_database))
@@ -368,6 +406,9 @@ void GameListModel::AddGame(const std::shared_ptr<const UICommon::GameFile>& gam
   beginInsertRows(QModelIndex(), m_games.size(), m_games.size());
   m_games.push_back(game);
   endInsertRows();
+
+  if (Config::Get(Config::MAIN_WII_FORWARDER_AUTO_SYNC))
+    m_sync_timer->start();
 }
 
 void GameListModel::UpdateGame(const std::shared_ptr<const UICommon::GameFile>& game)
@@ -390,6 +431,7 @@ void GameListModel::RemoveGame(const std::string& path)
   if (entry < 0)
     return;
 
+  // Keep tiles for offline media; only an explicit Remove from Wii Menu deletes a channel.
   beginRemoveRows(QModelIndex(), entry, entry);
   m_games.removeAt(entry);
   endRemoveRows();
@@ -527,5 +569,41 @@ void GameListModel::OnEmulationStateChanged(Core::State state)
   if (state == Core::State::Uninitialized)
   {
     m_timer.Reload();
+    QTimer::singleShot(0, this, &GameListModel::SyncForwarders);
   }
+}
+
+void GameListModel::SyncForwarders()
+{
+  if (m_syncing || !Config::Get(Config::MAIN_WII_FORWARDER_AUTO_SYNC) ||
+      !Core::IsUninitialized(Core::System::GetInstance()))
+    return;
+  m_syncing = true;
+  if (!WiiForwarder::RepairChannels())
+  {
+    m_syncing = false;
+    return;
+  }
+
+  bool any_installed = false;
+  auto games = m_games;
+  std::sort(games.begin(), games.end(),
+            [](const auto& a, const auto& b) { return a->GetFilePath() < b->GetFilePath(); });
+  for (const auto& game : games)
+  {
+    if (WiiForwarder::AvailableSlots(WiiForwarder::CountVisibleChannels()) == 0)
+      break;
+    if (game->GetPlatform() == DiscIO::Platform::WiiDisc &&
+        !WiiForwarder::IsForwarderInstalled(game->GetFilePath()))
+    {
+      if (WiiForwarder::InstallForwarder(game->GetFilePath(), /*silent=*/true))
+      {
+        INFO_LOG_FMT(CORE, "Sync: installed Wii Menu forwarder for '{}'", game->GetFilePath());
+        any_installed = true;
+      }
+    }
+  }
+  if (any_installed)
+    Settings::Instance().NANDRefresh();
+  m_syncing = false;
 }

@@ -1,0 +1,17 @@
+**Better Wii Menu DE 1.1.0 candidate — based on Dolphin 2609a**
+
+Extract the whole ZIP to a writable folder and run `BetterWiiMenuDE.exe`.
+
+- On Windows, the fork uses `%APPDATA%\Better Wii Menu DE`. On its first normal launch it copies a detected stock Dolphin profile's game folders, settings, controls, saves, and Wii data into that independent location. It never needs stock Dolphin's executable to run. Subsequent launches use the fork's copy; changes in stock Dolphin are not continuously mirrored.
+- Explicit `-u <profile>` overrides automatic import. An empty directory gives a clean first run. `portable.txt` next to the executable uses a local `User` directory and also bypasses import. Keep your existing profile backed up before testing upgrades.
+- The Wii Menu is always the first library entry, including cover view. Double-click it. If the Wii Menu is missing, choose a region to install its system software. You need an internet connection for that path; Tools also retains Dolphin's supported system-update-from-disc and NAND import features.
+- Add your game folder using the normal library settings. Wii disc games are synced while emulation is stopped; the next menu boot sees the channels. Configure an emulated or real Wii Remote in Controller Settings as appropriate for your hardware.
+- The menu has 48 cells including the Disc Channel. Existing installed channels share the remaining 47 cells with custom game tiles. Extra games remain available in the main library. Manual removal is remembered across rescans; manually adding a game again clears its exclusion. Temporarily unavailable drives keep their channels.
+- Help > Check for Fork Updates checks only stable releases in `Gavin-S-Dev/Better-Wii-Menu-DE` on GitHub. It opens the fork releases page for a newer version; it does not install anything automatically. The stock Dolphin update engine and updater executable are excluded. Automatic fork checks can be disabled in General settings.
+- Tools > Repair Wii Menu Channels recovers a journaled interrupted install/removal. Stop emulation before manual channel changes. Existing game save data is preserved when removing a custom tile.
+
+Known limits: Mario Party 9's banner is excluded because v1.0 documents a Wii Menu crash; launch that game from the main library. A missing or structurally invalid banner is skipped rather than installing a header-only channel. Structural validation cannot guarantee compatibility with every game's animation/sound. This candidate needs compatibility feedback and a clean Windows VM acceptance pass before a public stable release. Windows is the implementation/test target of this update.
+
+Developing: initialize Git submodules, use a Windows 10.0.22621+ SDK and CMake/Ninja, and use MSVC 19.51.36252 or newer. `python Tools/setup_fork_compiler.py` extracts hash-pinned Microsoft compiler/runtime packages into a local build folder without installing Visual Studio. `build_fork.cmd` configures/builds the application and C++ tests using that compiler and an existing Visual Studio SDK environment. Run `build-candidate/Binaries/Tests/tests.exe --gtest_filter=BetterWiiMenu*`. `python Tools/package_fork.py` makes a new ZIP with release runtimes and no user/test profiles.
+
+Keep upstream Dolphin's source history and COPYING. No games, personal NAND, keys, controller identity, or private profile are included in the release archive.

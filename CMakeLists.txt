@@ -84,7 +84,7 @@ dolphin_check_std_version("LLVM_libc++" _LIBCPP_VERSION ${libc++_min_version})
 # unique name here.
 set(DISTRIBUTOR "None" CACHE STRING "Name of the distributor.")
 
-set(DOLPHIN_DEFAULT_UPDATE_TRACK "" CACHE STRING "Name of the default update track. If empty, disables auto-update.")
+set(DOLPHIN_DEFAULT_UPDATE_TRACK "fork" CACHE STRING "Name of the default update track. If empty, disables auto-update.")
 
 if(UNIX AND NOT APPLE AND NOT ANDROID)
   option(ENABLE_X11 "Enables X11 Support" ON)
@@ -116,7 +116,7 @@ option(ENABLE_TESTS "Enables building the unit tests" ON)
 option(ENABLE_VULKAN "Enables vulkan video backend" ON)
 option(USE_DISCORD_PRESENCE "Enables Discord Rich Presence, show the current game on Discord" ON)
 option(USE_MGBA "Enables GBA controllers emulation using libmgba" ON)
-option(ENABLE_AUTOUPDATE "Enables support for automatic updates" ON)
+set(ENABLE_AUTOUPDATE OFF CACHE BOOL "Stock updater is disabled in Better Wii Menu DE" FORCE)
 option(USE_RETRO_ACHIEVEMENTS "Enables integration with retroachievements.org" ON)
 option(ENABLE_CCACHE "Enables CCache compiler cache" OFF)
 

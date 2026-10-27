@@ -1,0 +1,38 @@
+[
+  {
+    "fileName": "Microsoft.VC.14.51.CRT.Headers.base.vsix",
+    "sha256": "e6d9cc5f0750cbc40a6b2468991c57ed0044fa2e242295a6d51bc02d72502b05",
+    "size": 2079990,
+    "url": "https://download.visualstudio.microsoft.com/download/pr/a62262cf-b9f6-4770-9454-7372ad8fcec0/e6d9cc5f0750cbc40a6b2468991c57ed0044fa2e242295a6d51bc02d72502b05/Microsoft.VC.14.51.CRT.Headers.base.vsix"
+  },
+  {
+    "fileName": "Microsoft.VC.14.51.CRT.Redist.X64.base.vsix",
+    "sha256": "24a1c8dba0376d9b008ac2ba430d13c06664fc6f163511fd7866485030e289af",
+    "size": 3410743,
+    "url": "https://download.visualstudio.microsoft.com/download/pr/3984a6ef-2ffc-4c07-962e-bf9e9b862819/24a1c8dba0376d9b008ac2ba430d13c06664fc6f163511fd7866485030e289af/Microsoft.VC.14.51.CRT.Redist.X64.base.vsix"
+  },
+  {
+    "fileName": "Microsoft.VC.14.51.CRT.x64.Desktop.base.vsix",
+    "sha256": "b86f502f4092c11af0c99de3e1b535da17d0116af07e8b18dfec58e0b514485c",
+    "size": 66848857,
+    "url": "https://download.visualstudio.microsoft.com/download/pr/16ac3a9f-21a9-4b80-a1cb-097bd79ea455/b86f502f4092c11af0c99de3e1b535da17d0116af07e8b18dfec58e0b514485c/Microsoft.VC.14.51.CRT.x64.Desktop.base.vsix"
+  },
+  {
+    "fileName": "Microsoft.VC.14.51.Tools.HostX64.TargetX64.base.vsix",
+    "sha256": "86451403ada42c612d0eb773e479879e37b0e1ef45a6e406ad1b335805dec6fd",
+    "size": 29101916,
+    "url": "https://download.visualstudio.microsoft.com/download/pr/1a3f7ee8-40b3-467a-bca3-18a23a5e9a6c/86451403ada42c612d0eb773e479879e37b0e1ef45a6e406ad1b335805dec6fd/Microsoft.VC.14.51.Tools.HostX64.TargetX64.base.vsix"
+  },
+  {
+    "fileName": "Microsoft.VC.14.51.Tools.HostX64.TargetX64.Res.base.enu.vsix",
+    "sha256": "4726b44efd50a6ed8b1b891c55e4328a0c16ca1e6725bd9a29e0ee561bcae840",
+    "size": 242678,
+    "url": "https://download.visualstudio.microsoft.com/download/pr/1a3f7ee8-40b3-467a-bca3-18a23a5e9a6c/4726b44efd50a6ed8b1b891c55e4328a0c16ca1e6725bd9a29e0ee561bcae840/Microsoft.VC.14.51.Tools.HostX64.TargetX64.Res.base.enu.vsix"
+  },
+  {
+    "fileName": "Microsoft.VC.14.51.CRT.x64.Store.base.vsix",
+    "sha256": "1f641df0650a8657f6dc4a9fd030bc11c502a3a735a64a39735b9106c353058a",
+    "size": 30058345,
+    "url": "https://download.visualstudio.microsoft.com/download/pr/16ac3a9f-21a9-4b80-a1cb-097bd79ea455/1f641df0650a8657f6dc4a9fd030bc11c502a3a735a64a39735b9106c353058a/Microsoft.VC.14.51.CRT.x64.Store.base.vsix"
+  }
+]

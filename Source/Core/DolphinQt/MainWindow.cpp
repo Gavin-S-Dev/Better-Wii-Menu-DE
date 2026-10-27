@@ -67,6 +67,7 @@
 #include "Core/NetPlayServer.h"
 #include "Core/State.h"
 #include "Core/System.h"
+#include "Core/WiiForwarder.h"
 #include "Core/WiiUtils.h"
 
 #include "DiscIO/DirectoryBlob.h"
@@ -126,6 +127,8 @@
 #include "DolphinQt/ToolBar.h"
 #include "DolphinQt/WiiUpdate.h"
 
+#include <QInputDialog>
+#include "Common/BetterWiiMenu.h"
 #include "UICommon/DiscordPresence.h"
 #include "UICommon/GameFile.h"
 #include "UICommon/ResourcePack/Manager.h"
@@ -948,6 +951,14 @@ void MainWindow::OnStopComplete()
   {
     StartGame(std::move(m_pending_boot));
     m_pending_boot.reset();
+    return;
+  }
+
+  // Check if a forwarder channel requested booting a disc image
+  const std::string forwarder_boot_path = WiiForwarder::ConsumePendingForwarderBoot();
+  if (!forwarder_boot_path.empty())
+  {
+    StartGame(BootParameters::GenerateFromFile(forwarder_boot_path));
   }
 }
 
@@ -976,6 +987,12 @@ bool MainWindow::RequestStop()
 #ifdef RC_CLIENT_SUPPORTS_RAINTEGRATION
   confirm_on_stop = confirm_on_stop || AchievementManager::GetInstance().CheckForModifications();
 #endif  // RC_CLIENT_SUPPORTS_RAINTEGRATION
+
+  // Skip confirmation when a forwarder channel is launching a disc image —
+  // the user already chose to play the game from the Wii Menu.
+  if (WiiForwarder::HasPendingForwarderBoot())
+    confirm_on_stop = false;
+
   if (confirm_on_stop)
   {
     if (std::exchange(m_stop_confirm_showing, true))
@@ -1145,6 +1162,11 @@ void MainWindow::StartGame(const QString& path, ScanForSecondDisc scan,
 void MainWindow::StartGame(const std::string& path, ScanForSecondDisc scan,
                            std::unique_ptr<BootSessionData> boot_session_data)
 {
+  if (path == BetterWiiMenu::MENU_PATH)
+  {
+    BootWiiSystemMenu();
+    return;
+  }
   if (scan == ScanForSecondDisc::Yes)
   {
     std::shared_ptr<const UICommon::GameFile> game = m_game_list->FindGame(path);
@@ -1604,6 +1626,28 @@ void MainWindow::PerformOnlineUpdate(const std::string& region)
 
 void MainWindow::BootWiiSystemMenu()
 {
+  const std::string tmd =
+      File::GetUserPath(D_WIIROOT_IDX) + "title/00000001/00000002/content/title.tmd";
+  if (!File::Exists(tmd))
+  {
+    if (!Core::IsUninitialized(m_system))
+      return;
+    bool accepted = false;
+    const QStringList regions{tr("United States"), tr("Europe"), tr("Japan"), tr("Korea")};
+    const auto selected =
+        QInputDialog::getItem(this, tr("Set up the Wii Menu"),
+                              tr("The Wii Menu is not installed in this profile.\n"
+                                 "Choose a region to download the Wii system software:"),
+                              regions, 0, false, &accepted);
+    if (!accepted)
+      return;
+    const std::array<std::string, 4> codes{"USA", "EUR", "JPN", "KOR"};
+    PerformOnlineUpdate(codes.at(regions.indexOf(selected)));
+    if (!File::Exists(tmd))
+      return;
+  }
+  // Rebuild only while the emulated NAND is closed.
+
   StartGame(std::make_unique<BootParameters>(BootParameters::NANDTitle{Titles::SYSTEM_MENU}));
 }
 

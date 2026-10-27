@@ -209,6 +209,7 @@ signals:
   void LockCursorChanged();
   void KeepWindowOnTopChanged(bool top);
   void NANDRefresh();
+  void WiiForwarderAutoSyncEnabled();
   void RegistersVisibilityChanged(bool visible);
   void ThreadsVisibilityChanged(bool visible);
   void LogVisibilityChanged(bool visible);

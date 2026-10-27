@@ -191,7 +191,16 @@ int main(int argc, char* argv[])
   FreeConsole();
 #endif
 
-  UICommon::SetUserDirectory(static_cast<const char*>(options.get("user")));
+  try
+  {
+    UICommon::SetUserDirectory(static_cast<const char*>(options.get("user")));
+  }
+  catch (const std::exception& error)
+  {
+    QMessageBox::critical(nullptr, QStringLiteral("Better Wii Menu DE profile setup"),
+                          QString::fromUtf8(error.what()));
+    return 1;
+  }
   UICommon::CreateDirectories();
   UICommon::Init();
   Resources::Init();

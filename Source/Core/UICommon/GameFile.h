@@ -57,6 +57,7 @@ public:
   ~GameFile();
 
   bool IsValid() const;
+  bool IsWiiSystemMenu() const;
   const std::string& GetFilePath() const { return m_file_path; }
   const std::string& GetFileName() const { return m_file_name; }
   const std::string& GetName(const Core::TitleDatabase& title_database) const;

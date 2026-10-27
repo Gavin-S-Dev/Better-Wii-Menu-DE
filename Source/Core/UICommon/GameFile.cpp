@@ -18,6 +18,7 @@
 #include <fmt/ranges.h>
 #include <pugixml.hpp>
 
+#include "Common/BetterWiiMenu.h"
 #include "Common/BitUtils.h"
 #include "Common/ChunkFile.h"
 #include "Common/CommonPaths.h"
@@ -100,6 +101,17 @@ GameFile::GameFile() = default;
 
 GameFile::GameFile(std::string path) : m_file_path(std::move(path))
 {
+  if (IsWiiSystemMenu())
+  {
+    m_valid = true;
+    m_file_name = "Wii Menu";
+    m_long_names[DiscIO::Language::English] = "Wii Menu";
+    m_descriptions[DiscIO::Language::English] = "Open the Wii System Menu";
+    m_game_id = "WII-MENU";
+    m_title_id = 0x0000000100000002;
+    m_platform = DiscIO::Platform::WiiWAD;
+    return;
+  }
   m_file_name = PathToFileName(m_file_path);
 
   {
@@ -180,6 +192,11 @@ GameFile::GameFile(std::string path) : m_file_path(std::move(path))
       }
     }
   }
+}
+
+bool GameFile::IsWiiSystemMenu() const
+{
+  return m_file_path == BetterWiiMenu::MENU_PATH;
 }
 
 GameFile::~GameFile() = default;
@@ -502,6 +519,8 @@ const std::string& GameFile::GetName(const Core::TitleDatabase& title_database) 
 
 const std::string& GameFile::GetName(Variant variant) const
 {
+  if (IsWiiSystemMenu())
+    return m_file_name;
   if (variant == Variant::LongAndPossiblyCustom && !m_custom_name.empty())
     return m_custom_name;
 

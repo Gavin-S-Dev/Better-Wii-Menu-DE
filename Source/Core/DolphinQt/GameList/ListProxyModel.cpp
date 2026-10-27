@@ -18,6 +18,10 @@ bool ListProxyModel::filterAcceptsRow(int source_row, const QModelIndex& source_
 
 bool ListProxyModel::lessThan(const QModelIndex& left, const QModelIndex& right) const
 {
+  const bool left_menu = left.data(GameListModel::WII_MENU_ROLE).toBool();
+  const bool right_menu = right.data(GameListModel::WII_MENU_ROLE).toBool();
+  if (left_menu != right_menu)
+    return sortOrder() == Qt::AscendingOrder ? left_menu : right_menu;
   if (left.data(GameListModel::SORT_ROLE) != right.data(GameListModel::SORT_ROLE))
     return QSortFilterProxyModel::lessThan(left, right);
 
