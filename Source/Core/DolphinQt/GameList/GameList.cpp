@@ -46,6 +46,7 @@
 #include "Common/FileUtil.h"
 
 #include "Core/Config/MainSettings.h"
+#include "Core/Config/UISettings.h"
 #include "Core/Core.h"
 #include "Core/HW/DVD/DVDInterface.h"
 #include "Core/HW/EXI/EXI.h"
@@ -403,6 +404,13 @@ void GameList::ShowContextMenu(const QPoint&)
   {
     QMenu menu(this);
     menu.addAction(tr("Open Wii Menu"), this, &GameList::GameSelected);
+    auto* auto_launch = menu.addAction(tr("Automatically Launch Wii Menu on Startup"));
+    auto_launch->setCheckable(true);
+    auto_launch->setChecked(Config::Get(Config::MAIN_WII_MENU_AUTO_LAUNCH));
+    connect(auto_launch, &QAction::toggled, this, [](bool enabled) {
+      Config::SetBase(Config::MAIN_WII_MENU_AUTO_LAUNCH, enabled);
+      Config::Save();
+    });
     menu.exec(QCursor::pos());
     return;
   }

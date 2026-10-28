@@ -4,17 +4,22 @@
 #include "DolphinQt/MainWindow.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QCloseEvent>
 #include <QDateTime>
 #include <QDesktopServices>
+#include <QDialog>
 #include <QDir>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QIcon>
+#include <QLabel>
 #include <QMimeData>
 #include <QStackedWidget>
 #include <QStyleHints>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWindow>
 
@@ -333,6 +338,11 @@ MainWindow::MainWindow(Core::System& system, std::unique_ptr<BootParameters> boo
   {
     StartGame(std::move(m_pending_boot));
     m_pending_boot.reset();
+  }
+  else if (!Settings::Instance().IsBatchModeEnabled() && movie_path.empty())
+  {
+    // Defer until the main window is ready; an explicit command-line boot takes priority.
+    QTimer::singleShot(0, this, &MainWindow::MaybeAutoLaunchWiiMenu);
   }
 }
 
@@ -1634,6 +1644,71 @@ void MainWindow::PerformOnlineUpdate(const std::string& region)
   WiiUpdate::PerformOnlineUpdate(region, this);
   // Since the update may have installed a newer system menu, trigger a refresh.
   Settings::Instance().NANDRefresh();
+}
+
+void MainWindow::MaybeAutoLaunchWiiMenu()
+{
+  if (!Config::Get(Config::MAIN_WII_MENU_AUTO_LAUNCH) || !Core::IsUninitialized(m_system))
+    return;
+
+  QDialog dialog(this);
+  dialog.setWindowTitle(tr("Automatic Wii Menu Launch"));
+  dialog.setWindowModality(Qt::WindowModal);
+  dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+  auto* layout = new QVBoxLayout(&dialog);
+  layout->addWidget(new QLabel(tr("The Wii Menu will open automatically in:"), &dialog));
+  auto* countdown = new QLabel(tr("3 seconds"), &dialog);
+  countdown->setAlignment(Qt::AlignCenter);
+  auto font = countdown->font();
+  font.setPointSize(24);
+  font.setBold(true);
+  countdown->setFont(font);
+  layout->addWidget(countdown);
+  auto* enabled = new QCheckBox(tr("Automatically launch Wii Menu on startup"), &dialog);
+  enabled->setChecked(true);
+  layout->addWidget(enabled);
+  auto* help = new QLabel(tr("Uncheck to stay here. To enable it again, right-click the Wii Menu "
+                             "tile in your library."),
+                          &dialog);
+  help->setWordWrap(true);
+  layout->addWidget(help);
+  dialog.setFixedSize(dialog.sizeHint().expandedTo(QSize(360, 0)));
+
+  connect(enabled, &QCheckBox::toggled, &dialog, [&dialog](bool checked) {
+    if (!checked)
+    {
+      Config::SetBase(Config::MAIN_WII_MENU_AUTO_LAUNCH, false);
+      Config::Save();
+      dialog.reject();
+    }
+  });
+  connect(&Settings::Instance(), &Settings::EmulationStateChanged, &dialog,
+          [&dialog](Core::State state) {
+            if (state != Core::State::Uninitialized)
+              dialog.reject();
+          });
+
+  // Use elapsed time so delayed UI events cannot make the countdown run early or drift.
+  QElapsedTimer elapsed;
+  QTimer timer(&dialog);
+  timer.setTimerType(Qt::PreciseTimer);
+  timer.setInterval(100);
+  connect(&timer, &QTimer::timeout, &dialog, [&] {
+    const auto remaining = 3000 - elapsed.elapsed();
+    if (remaining <= 0)
+    {
+      timer.stop();
+      dialog.accept();
+      return;
+    }
+    const auto seconds = (remaining + 999) / 1000;
+    countdown->setText(seconds == 1 ? tr("1 second") : tr("%1 seconds").arg(seconds));
+  });
+  elapsed.start();
+  timer.start();
+  if (dialog.exec() == QDialog::Accepted && Config::Get(Config::MAIN_WII_MENU_AUTO_LAUNCH) &&
+      Core::IsUninitialized(m_system))
+    BootWiiSystemMenu();
 }
 
 void MainWindow::BootWiiSystemMenu()

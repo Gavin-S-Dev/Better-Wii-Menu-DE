@@ -125,6 +125,7 @@ private:
   void IncrementSelectedStateSlot();
   void DecrementSelectedStateSlot();
   void BootWiiSystemMenu();
+  void MaybeAutoLaunchWiiMenu();
 
   void PerformOnlineUpdate(const std::string& region);
 
