@@ -1,4 +1,4 @@
-**Better Wii Menu DE 1.3.0 candidate — based on Dolphin 2609a**
+**Better Wii Menu DE 1.3.1 candidate — based on Dolphin 2609a**
 
 Extract the whole ZIP to a writable folder and run `BetterWiiMenuDE.exe`.
 

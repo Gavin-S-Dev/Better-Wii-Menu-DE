@@ -1665,6 +1665,12 @@ void MainWindow::MaybeAutoLaunchWiiMenu()
   countdown->setFont(font);
   layout->addWidget(countdown);
   auto* enabled = new QCheckBox(tr("Automatically launch Wii Menu on startup"), &dialog);
+  auto option_font = enabled->font();
+  option_font.setPointSize(std::max(11, option_font.pointSize() + 2));
+  enabled->setFont(option_font);
+  enabled->setMinimumHeight(44);
+  enabled->setStyleSheet(QStringLiteral("QCheckBox { spacing: 10px; padding: 6px; }"
+                                        "QCheckBox::indicator { width: 24px; height: 24px; }"));
   enabled->setChecked(true);
   layout->addWidget(enabled);
   auto* help = new QLabel(tr("Uncheck to stay here. To enable it again, right-click the Wii Menu "

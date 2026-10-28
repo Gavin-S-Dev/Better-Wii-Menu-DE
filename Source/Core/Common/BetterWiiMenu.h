@@ -9,7 +9,7 @@
 
 namespace BetterWiiMenu
 {
-inline constexpr char VERSION[] = "1.3.0";
+inline constexpr char VERSION[] = "1.3.1";
 inline constexpr char RELEASES_URL[] = "https://github.com/Gavin-S-Dev/Better-Wii-Menu-DE/releases";
 inline constexpr char RELEASES_API[] =
     "https://api.github.com/repos/Gavin-S-Dev/Better-Wii-Menu-DE/releases/latest";
