@@ -396,6 +396,32 @@ TEST_F(BetterWiiMenuTest, InstallsAtExactCapacityAndRejectsOverflow)
   EXPECT_EQ(WiiForwarder::CountVisibleChannels(), 47u);
 }
 
+TEST_F(BetterWiiMenuTest, OneHundredGameCandidatesPreserveOverflowFilesAndExistingChannels)
+{
+  // Model a menu with Mii already installed: 46 game tiles plus Mii and Disc fill its 48 cells.
+  const auto existing = m_path + "/Wii/title/00010002/48414341/content/title.tmd";
+  Write(existing, "existing system channel");
+  unsigned installed = 0;
+  for (unsigned i = 0; i < 100; ++i)
+  {
+    const auto source = Source(i);
+    const bool result = WiiForwarder::InstallChannel(source, true);
+    EXPECT_EQ(result, i < 46) << i;
+    installed += result;
+    EXPECT_TRUE(File::Exists(source.path)) << i;
+    EXPECT_LE(WiiForwarder::CountVisibleChannels(), 47u) << i;
+  }
+  EXPECT_EQ(installed, 46u);
+  EXPECT_EQ(WiiForwarder::GetInstalledForwarders().size(), 46u);
+  EXPECT_EQ(WiiForwarder::CountVisibleChannels(), 47u);
+  std::string metadata;
+  ASSERT_TRUE(File::ReadFileToString(existing, metadata));
+  EXPECT_EQ(metadata, "existing system channel");
+  EXPECT_TRUE(WiiForwarder::RepairChannels());
+  EXPECT_EQ(WiiForwarder::GetInstalledForwarders().size(), 46u);
+  EXPECT_EQ(WiiForwarder::CountVisibleChannels(), 47u);
+}
+
 TEST_F(BetterWiiMenuTest, DeduplicatesAndRelinksWithoutOverwritingAnotherChannel)
 {
   auto source = Source(1);
