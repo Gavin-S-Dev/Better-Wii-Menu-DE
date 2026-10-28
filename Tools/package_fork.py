@@ -42,7 +42,7 @@ def package():
     assert not (output / "User").exists()
     assert not (output / "Updater.exe").exists()
     assert not list(output.rglob("*.pdb"))
-    archive = output.with_suffix(".zip")
+    archive = output.parent / (output.name + ".zip")
     with zipfile.ZipFile(archive, "x", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for path in output.rglob("*"):
             if path.is_file():
