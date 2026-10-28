@@ -586,6 +586,8 @@ add_library(core
   WC24PatchEngine.h
   WiiForwarder.cpp
   WiiForwarder.h
+  WiiBanner.cpp
+  WiiBanner.h
   WiiRoot.cpp
   WiiRoot.h
   WiiUtils.cpp

@@ -1,6 +1,7 @@
 """Package the tested Release output, excluding all developer/test/user profiles."""
 import hashlib
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -11,7 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def package():
     source = ROOT / "build-candidate" / "Binaries"
-    output = ROOT / "dist" / "BetterWiiMenuDE-1.1.0-2609a-x64"
+    header = (ROOT / "Source/Core/Common/BetterWiiMenu.h").read_text(encoding="utf-8")
+    version = re.search(r'VERSION\[\] = "(\d+\.\d+\.\d+)"', header).group(1)
+    output = ROOT / "dist" / f"BetterWiiMenuDE-{version}-2609a-x64"
     if output.exists():
         raise RuntimeError(f"Refusing to overwrite existing package: {output}")
     if not (source / "BetterWiiMenuDE.exe").is_file():
@@ -33,7 +36,7 @@ def package():
     shutil.copy2(ROOT / "COPYING", output / "COPYING")
     shutil.copy2(ROOT / "Readme-BetterWiiMenu.md", output / "README.md")
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    manifest = {"fork_version": "1.1.0", "upstream": "2609a", "base_commit": revision,
+    manifest = {"fork_version": version, "upstream": "2609a", "base_commit": revision,
                 "working_tree_changes": bool(subprocess.check_output(
                     ["git", "status", "--porcelain"], cwd=ROOT)),
                 "files": {str(p.relative_to(output)): hashlib.sha256(p.read_bytes()).hexdigest()

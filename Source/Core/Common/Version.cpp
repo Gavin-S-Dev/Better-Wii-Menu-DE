@@ -5,12 +5,11 @@
 
 #include <string>
 
+#include "Common/BetterWiiMenu.h"
 #include "Common/scmrev.h"
 
 namespace Common
 {
-#define EMULATOR_NAME "Better Wii Menu DE 1.1.0 (Dolphin)"
-
 #ifdef _DEBUG
 #define BUILD_TYPE_STR "Debug "
 #elif defined DEBUGFAST
@@ -21,22 +20,23 @@ namespace Common
 
 const std::string& GetEmulatorName()
 {
-  static const std::string emulator_name = EMULATOR_NAME;
+  static const std::string emulator_name =
+      std::string("Better Wii Menu DE ") + BetterWiiMenu::VERSION + " (Dolphin)";
   return emulator_name;
 }
 
 const std::string& GetScmRevStr()
 {
-  static const std::string scm_rev_str = EMULATOR_NAME " "
+  static const std::string scm_rev_str = GetEmulatorName() + " "
   // Note this macro can be empty if the master branch does not exist.
 #if 1 - SCM_COMMITS_AHEAD_MASTER - 1 != 0
-                                                       "[" SCM_BRANCH_STR "] "
+                                                             "[" SCM_BRANCH_STR "] "
 #endif
 
 #ifdef __INTEL_COMPILER
-      BUILD_TYPE_STR SCM_DESC_STR "-ICC";
+                                         BUILD_TYPE_STR SCM_DESC_STR "-ICC";
 #else
-      BUILD_TYPE_STR SCM_DESC_STR;
+                                         BUILD_TYPE_STR SCM_DESC_STR;
 #endif
   return scm_rev_str;
 }
@@ -61,7 +61,7 @@ const std::string& GetScmBranchStr()
 
 const std::string& GetUserAgentStr()
 {
-  static const std::string user_agent_str = EMULATOR_NAME "/" SCM_DESC_STR;
+  static const std::string user_agent_str = GetEmulatorName() + "/" SCM_DESC_STR;
   return user_agent_str;
 }
 

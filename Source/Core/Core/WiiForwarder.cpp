@@ -30,6 +30,7 @@
 #include "Common/StringUtil.h"
 #include "Common/Swap.h"
 #include "Core/IOS/ES/Formats.h"
+#include "Core/WiiBanner.h"
 #include "DiscIO/DiscExtractor.h"
 #include "DiscIO/Enums.h"
 #include "DiscIO/Filesystem.h"
@@ -179,12 +180,12 @@ bool IsBannerSafe(std::span<const u8> data)
   return banner && icon;
 }
 
-static bool OwnsChannel(u64 title)
+static bool OwnsChannel(u64 title, std::string_view directory = "content")
 {
   if (static_cast<u32>(title >> 32) != FORWARDER_TITLE_TYPE)
     return false;
-  const auto path =
-      Common::GetTitleContentPath(title, Common::FromWhichRoot::Configured) + "/00000000.app";
+  const auto path = Common::GetTitlePath(title, Common::FromWhichRoot::Configured) + "/" +
+                    std::string(directory) + "/00000000.app";
   if (File::GetSize(path) > 16 * 1024 * 1024)
     return false;
   std::string content;
@@ -336,7 +337,7 @@ static std::vector<u8> BuildForwarderTicket(u64 forwarder_title_id)
 // Extract the full opening.bnr from the disc image. This contains the IMET header
 // plus the U8 archive with icon.bin, banner.bin, and sound.bin â€” giving us the
 // animated banner, icon, and sound that the Wii Menu displays for channels.
-// Falls back to a minimal text-only IMET if extraction fails.
+// Missing or malformed banners are rejected by the installer.
 static std::vector<u8> ExtractOpeningBnr(const DiscIO::Volume& volume,
                                          const DiscIO::Partition& partition)
 {
@@ -363,6 +364,92 @@ static std::vector<u8> ExtractOpeningBnr(const DiscIO::Volume& volume,
     return {};
 
   return data;
+}
+
+static bool WriteBytes(const std::string& path, std::span<const u8> bytes)
+{
+  if (!File::CreateFullPath(path))
+    return false;
+  File::IOFile output(path, "wb");
+  return output && output.WriteBytes(bytes.data(), bytes.size()) && output.Flush() && output.Close();
+}
+
+// Upgrade legacy MP9 icons without touching tickets, other titles, or the save-data directory.
+// Retained old content also provides recovery if publication is interrupted between renames.
+static bool RepairMarioParty9Channels(Common::IniFile& ini)
+{
+  for (char region = 'A'; region <= 'Z'; ++region)
+  {
+    const std::string game_id = std::string("SSQ") + region + "01";
+    const u64 id = GenerateForwarderTitleID(game_id);
+    const auto key = fmt::format("{:016x}", id);
+    const auto title = Common::GetTitlePath(id, Common::FromWhichRoot::Configured);
+    const auto active = title + "/content";
+    const auto backup = title + "/content.before-icon-fix";
+    const auto stage = title + "/content.icon-fix";
+    std::string source;
+    for (const auto* directory : {"content", "content.before-icon-fix", "content.quarantined"})
+    {
+      if ((std::string_view(directory) == "content.before-icon-fix" &&
+           !ini.Exists("IconFix", key)) ||
+          (std::string_view(directory) == "content.quarantined" &&
+           ini.Exists("IconRepaired", key)))
+        continue;
+      if (OwnsChannel(id, directory))
+      {
+        source = title + "/" + directory;
+        break;
+      }
+    }
+    if (source.empty())
+      continue;
+    // A genuine active title must never be replaced by a leftover archived forwarder.
+    if (source != active && File::Exists(active))
+      return false;
+    std::string bytes, metadata;
+    if (!File::ReadFileToString(source + "/00000000.app", bytes) ||
+        !File::ReadFileToString(source + "/title.tmd", metadata))
+      return false;
+    const auto marker = bytes.rfind("DFWD");
+    const auto prepared = PrepareChannelBanner(
+        game_id, std::span(reinterpret_cast<const u8*>(bytes.data()), marker));
+    if (!prepared)
+      return false;
+    const IOS::ES::TMDReader old_tmd(std::vector<u8>(metadata.begin(), metadata.end()));
+    if (!old_tmd.IsValid() || old_tmd.GetTitleId() != id)
+      return false;
+    if (!File::Exists(Common::GetTicketFileName(id, Common::FromWhichRoot::Configured)))
+      return false;
+    const std::string path = bytes.substr(marker + 4, bytes.size() - marker - 5);
+    const bool unchanged = source == active && prepared->size() == marker &&
+                           std::equal(prepared->begin(), prepared->end(),
+                                      reinterpret_cast<const u8*>(bytes.data()));
+    if (!unchanged)
+    {
+      ini.GetOrCreateSection("IconFix")->Set(key, true);
+      if (!SaveMappingFile(ini))
+        return false;
+      auto content = *prepared;
+      content.insert(content.end(), bytes.begin() + marker, bytes.end());
+      const auto tmd = BuildForwarderTMD(id, old_tmd.GetIOSId(), content);
+      // Only remove our partial stage after ownership of the original has been established.
+      if (File::Exists(stage) && !File::DeleteDirRecursively(stage))
+        return false;
+      if (!WriteBytes(stage + "/00000000.app", content) ||
+          !WriteBytes(stage + "/title.tmd", tmd))
+        return false;
+      if (source == active && (File::Exists(backup) || !File::RenameSync(active, backup)))
+        return false;
+      if (!File::RenameSync(stage, active))
+        return false;
+      INFO_LOG_FMT(CORE, "Updated Mario Party 9's channel-grid icon: {}", path);
+    }
+    ini.GetOrCreateSection("Forwarders")->Set(key, path);
+    ini.DeleteKey("Excluded", key);
+    ini.GetOrCreateSection("IconRepaired")->Set(key, true);
+    ini.DeleteKey("IconFix", key);
+  }
+  return true;
 }
 
 // --- Install/Uninstall ---
@@ -400,10 +487,6 @@ bool InstallChannel(const ChannelData& source, bool silent)
     return fail("Install the Wii Menu first by opening the Wii Menu tile in your library.");
   if (game_id.size() != 6)
     return fail("The disc image has an invalid game ID.");
-  // The v1.0 release identifies this banner as unsafe. Keep it out until a reproduced fix exists.
-  if (game_id.starts_with("SSQ"))
-    return fail("Mario Party 9's channel banner is currently unsupported. Launch it from the game "
-                "library.");
   const u64 title = GenerateForwarderTitleID(game_id);
   const auto key = fmt::format("{:016x}", title);
   auto ini = LoadMappingFile();
@@ -430,10 +513,11 @@ bool InstallChannel(const ChannelData& source, bool silent)
   if (AvailableSlots(CountVisibleChannels()) == 0)
     return fail(
         "The Wii Menu is full (48 tiles including the Disc Channel). Remove a channel first.");
-  if (!IsBannerSafe(source.banner))
+  const auto prepared = PrepareChannelBanner(game_id, source.banner);
+  if (!prepared)
     return fail("This game's banner is missing or invalid. The game can still be launched from the "
                 "library.");
-  auto content = source.banner;
+  auto content = *prepared;
   const std::string marker = "DFWD" + disc_image_path;
   content.insert(content.end(), marker.begin(), marker.end());
   content.push_back(0);
@@ -444,19 +528,13 @@ bool InstallChannel(const ChannelData& source, bool silent)
   if (File::Exists(stage))
     return fail(
         "An interrupted channel install needs recovery. Use Tools > Repair Wii Menu Channels.");
-  const auto write = [](const std::string& path, std::span<const u8> bytes) {
-    if (!File::CreateFullPath(path))
-      return false;
-    File::IOFile output(path, "wb");
-    return output && output.WriteBytes(bytes.data(), bytes.size()) && output.Flush() &&
-           output.Close();
-  };
   // Journal first, so a partial stage is recoverable after a failed write or process exit.
   ini.GetOrCreateSection("Pending")->Set(key, NormalizePath(disc_image_path));
   if (!SaveMappingFile(ini))
     return fail("Could not save the channel mapping; no channel was installed.");
-  if (!write(stage + "/content/00000000.app", content) ||
-      !write(stage + "/content/title.tmd", tmd) || !write(stage + "/ticket.tik", ticket_data))
+  if (!WriteBytes(stage + "/content/00000000.app", content) ||
+      !WriteBytes(stage + "/content/title.tmd", tmd) ||
+      !WriteBytes(stage + "/ticket.tik", ticket_data))
     return fail("Could not stage the channel. Check space and permissions, then repair channels.");
   if (!File::CreateFullPath(ticket) || !File::CreateFullPath(title_path + "/data/") ||
       !File::RenameSync(stage + "/ticket.tik", ticket) ||
@@ -499,29 +577,14 @@ bool RepairChannels()
         return false;
       ini.DeleteKey("Forwarders", key);
       ini.GetOrCreateSection("Excluded")->Set(key, true);
+      ini.DeleteKey("IconFix", key);
+      ini.GetOrCreateSection("IconRepaired")->Set(key, true);
       ini.DeleteKey("Removing", key);
     }
   }
-  // A migrated v1.0 profile may already contain the documented unsafe banner.
-  // Quarantine that owned content outside the path scanned by the Wii Menu.
-  for (const auto& [id, disc] : GetInstalledForwarders())
-  {
-    bool known_unsafe = false;
-    for (char region = 'A'; region <= 'Z'; ++region)
-      known_unsafe |= id == GenerateForwarderTitleID(std::string("SSQ") + region + "01");
-    if (!known_unsafe || !OwnsChannel(id))
-      continue;
-    const auto title = Common::GetTitlePath(id, Common::FromWhichRoot::Configured);
-    if (!File::RenameSync(title + "/content", title + "/content.quarantined"))
-      return false;
-    const auto key = fmt::format("{:016x}", id);
-    ini.DeleteKey("Forwarders", key);
-    ini.GetOrCreateSection("Excluded")->Set(key, true);
-    WARN_LOG_FMT(CORE, "Quarantined the known unsafe Mario Party 9 banner: {}", disc);
-  }
   const auto* pending = ini.GetSection("Pending");
   if (!pending)
-    return SaveMappingFile(ini);
+    return RepairMarioParty9Channels(ini) && SaveMappingFile(ini);
   const auto values = pending->GetValues();
   for (const auto& [key, path] : values)
   {
@@ -547,7 +610,7 @@ bool RepairChannels()
     if (File::Exists(title + ".installing") && !File::DeleteDirRecursively(title + ".installing"))
       return false;
   }
-  return SaveMappingFile(ini);
+  return RepairMarioParty9Channels(ini) && SaveMappingFile(ini);
 }
 
 bool UninstallForwarder(u64 title)
@@ -570,6 +633,8 @@ bool UninstallForwarder(u64 title)
     return false;
   ini.DeleteKey("Forwarders", key);
   ini.GetOrCreateSection("Excluded")->Set(key, true);
+  ini.DeleteKey("IconFix", key);
+  ini.GetOrCreateSection("IconRepaired")->Set(key, true);
   if (!SaveMappingFile(ini))
   {
     File::RenameSync(removed, content);

@@ -1236,6 +1236,16 @@ void MainWindow::StartGame(std::unique_ptr<BootParameters>&& parameters)
     return;
   }
 
+  if (parameters && std::holds_alternative<BootParameters::NANDTitle>(parameters->parameters) &&
+      std::get<BootParameters::NANDTitle>(parameters->parameters).id == Titles::SYSTEM_MENU &&
+      !WiiForwarder::RepairChannels())
+  {
+    ModalMessageBox::critical(this, tr("Wii Menu channel repair failed"),
+                             tr("The Wii Menu could not safely prepare its game channels.\n"
+                                "Check available disk space and permissions, then try again."));
+    return;
+  }
+
   // We need the render widget before booting.
   ShowRenderWidget();
 

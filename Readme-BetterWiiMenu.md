@@ -1,4 +1,4 @@
-**Better Wii Menu DE 1.1.0 candidate — based on Dolphin 2609a**
+**Better Wii Menu DE 1.1.1 candidate — based on Dolphin 2609a**
 
 Extract the whole ZIP to a writable folder and run `BetterWiiMenuDE.exe`.
 
@@ -9,8 +9,9 @@ Extract the whole ZIP to a writable folder and run `BetterWiiMenuDE.exe`.
 - The menu has 48 cells including the Disc Channel. Existing installed channels share the remaining 47 cells with custom game tiles. Extra games remain available in the main library. Manual removal is remembered across rescans; manually adding a game again clears its exclusion. Temporarily unavailable drives keep their channels.
 - Help > Check for Fork Updates checks only stable releases in `Gavin-S-Dev/Better-Wii-Menu-DE` on GitHub. It opens the fork releases page for a newer version; it does not install anything automatically. The stock Dolphin update engine and updater executable are excluded. Automatic fork checks can be disabled in General settings.
 - Tools > Repair Wii Menu Channels recovers a journaled interrupted install/removal. Stop emulation before manual channel changes. Existing game save data is preserved when removing a custom tile.
+- Mario Party 9 uses a lighter animated logo/background in the small channel tile. Its original full-size animated preview and sound are preserved. Opening the Wii Menu upgrades older tiles and restores tiles quarantined by the previous candidate, with old content retained as a backup and saves preserved. A later manual removal remains respected.
 
-Known limits: Mario Party 9's banner is excluded because v1.0 documents a Wii Menu crash; launch that game from the main library. A missing or structurally invalid banner is skipped rather than installing a header-only channel. Structural validation cannot guarantee compatibility with every game's animation/sound. This candidate needs compatibility feedback and a clean Windows VM acceptance pass before a public stable release. Windows is the implementation/test target of this update.
+Known limits: a missing, structurally invalid, or unrecognized modified Mario Party 9 banner is skipped rather than installing a broken channel. The Mario Party 9 fix was runtime-tested with the USA/Asia SSQE01 disc; other regions and modified banners need compatibility testing. Structural validation cannot guarantee compatibility with every game's animation/sound. This candidate needs compatibility feedback and a clean Windows VM acceptance pass before a public stable release. Windows is the implementation/test target of this update.
 
 Developing: initialize Git submodules, use a Windows 10.0.22621+ SDK and CMake/Ninja, and use MSVC 19.51.36252 or newer. `python Tools/setup_fork_compiler.py` extracts hash-pinned Microsoft compiler/runtime packages into a local build folder without installing Visual Studio. `build_fork.cmd` configures/builds the application and C++ tests using that compiler and an existing Visual Studio SDK environment. Run `build-candidate/Binaries/Tests/tests.exe --gtest_filter=BetterWiiMenu*`. `python Tools/package_fork.py` makes a new ZIP with release runtimes and no user/test profiles.
 

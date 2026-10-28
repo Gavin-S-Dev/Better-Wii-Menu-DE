@@ -38,6 +38,12 @@ try:
         if render:
             break
         time.sleep(1)
+    if render is None:
+        for index, window in enumerate(app.windows()):
+            print('BOOT WINDOW', window.window_text(),
+                  [(x.element_info.control_type, x.window_text()) for x in window.descendants()
+                   if x.element_info.control_type in ['Text', 'Button']], flush=True)
+            window.capture_as_image().save(output / f'boot-window-{index}.png')
     assert render is not None, "Wii Menu did not boot"
     time.sleep(12)
     main.menu_select("Movie->TAS Input")
