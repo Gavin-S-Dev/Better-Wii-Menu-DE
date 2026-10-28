@@ -58,6 +58,7 @@
 #include "Core/IOS/WFS/WFSSRV.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
+#include "Core/WiiMenuBannerHeap.h"
 #include "Core/WiiRoot.h"
 
 namespace IOS::HLE
@@ -420,12 +421,15 @@ static std::vector<u8> ReadBootContent(FSCore& fs, const std::string& path, size
 
 // This corresponds to syscall 0x41, which loads a binary from the NAND and bootstraps the PPC.
 // Unlike 0x42, IOS will set up some constants in memory before booting the PPC.
-bool EmulationKernel::BootstrapPPC(const std::string& boot_content_path)
+bool EmulationKernel::BootstrapPPC(const std::string& boot_content_path, bool system_menu)
 {
   // Seeking and processing overhead is ignored as most time is spent reading from the NAND.
   u64 ticks = 0;
 
-  const DolReader dol{ReadBootContent(GetFSCore(), boot_content_path, 0, &ticks)};
+  auto boot_content = ReadBootContent(GetFSCore(), boot_content_path, 0, &ticks);
+  if (system_menu && WiiForwarder::ExpandWiiMenuIconHeaps(boot_content))
+    INFO_LOG_FMT(IOS, "Expanded Wii Menu channel icon heaps to 128 KiB");
+  const DolReader dol{std::move(boot_content)};
 
   if (!dol.IsValid())
     return false;

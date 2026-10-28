@@ -1241,8 +1241,10 @@ void MainWindow::StartGame(std::unique_ptr<BootParameters>&& parameters)
       !WiiForwarder::RepairChannels())
   {
     ModalMessageBox::critical(this, tr("Wii Menu channel repair failed"),
-                             tr("The Wii Menu could not safely prepare its game channels.\n"
-                                "Check available disk space and permissions, then try again."));
+                              tr("The Wii Menu could not safely prepare its game channels.\n"
+                                 "A banner may be unsupported, or its storage unavailable.\n"
+                                 "Use Tools > Repair Wii Menu Channels, or remove the affected "
+                                 "tile and launch its game from the library."));
     return;
   }
 

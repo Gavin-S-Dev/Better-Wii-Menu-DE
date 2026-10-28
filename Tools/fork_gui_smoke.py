@@ -9,6 +9,9 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "build-win-release" / "python-tools"))
 from pywinauto import Application
+import win32api
+import win32con
+import win32gui
 
 
 def run(executable, profile, output):
@@ -29,14 +32,27 @@ def run(executable, profile, output):
         # A fresh profile must offer setup rather than failing to boot a nonexistent title.
         installed = (profile / "Wii/title/00000001/00000002/content/title.tmd").exists()
         if not installed:
-            menus[0].double_click_input()
-            time.sleep(1)
-            dialog = next(x for x in window.descendants(control_type="Window")
-                          if x.window_text() == "Set up the Wii Menu")
+            menus[0].iface_selection_item.Select()
+            # Qt's synchronous accessibility invocation blocks on modal setup. Post the click
+            # directly to our window instead; this never moves the user's mouse or steals focus.
+            button = window.child_window(title="Play", control_type="Button").rectangle()
+            point = win32gui.ScreenToClient(window.handle, (button.mid_point().x, button.mid_point().y))
+            position = win32api.MAKELONG(*point)
+            win32gui.PostMessage(window.handle, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, position)
+            win32gui.PostMessage(window.handle, win32con.WM_LBUTTONUP, 0, position)
+            dialog = None
+            for _ in range(50):
+                dialog = next((x for x in window.descendants(control_type="Window")
+                               if x.window_text() == "Set up the Wii Menu"), None)
+                if dialog is not None:
+                    break
+                time.sleep(0.2)
+            assert dialog is not None, "Missing first-run setup dialog"
             print("FIRST RUN", dialog.window_text())
             dialog.capture_as_image().save(output / "setup.png")
             assert "Set up the Wii Menu" in dialog.window_text()
-            next(x for x in dialog.descendants(control_type="Button") if x.window_text() == "Cancel").click()
+            next(x for x in dialog.descendants(control_type="Button")
+                 if x.window_text() == "Cancel").invoke()
         window.close()
         process.wait(timeout=15)
         print("PASS")

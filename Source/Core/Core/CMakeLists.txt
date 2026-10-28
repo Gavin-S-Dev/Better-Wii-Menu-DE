@@ -588,6 +588,8 @@ add_library(core
   WiiForwarder.h
   WiiBanner.cpp
   WiiBanner.h
+  WiiMenuBannerHeap.cpp
+  WiiMenuBannerHeap.h
   WiiRoot.cpp
   WiiRoot.h
   WiiUtils.cpp

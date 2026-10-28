@@ -31,6 +31,7 @@
 #include "Common/Swap.h"
 #include "Core/IOS/ES/Formats.h"
 #include "Core/WiiBanner.h"
+#include "Core/WiiMenuBannerHeap.h"
 #include "DiscIO/DiscExtractor.h"
 #include "DiscIO/Enums.h"
 #include "DiscIO/Filesystem.h"
@@ -371,29 +372,40 @@ static bool WriteBytes(const std::string& path, std::span<const u8> bytes)
   if (!File::CreateFullPath(path))
     return false;
   File::IOFile output(path, "wb");
-  return output && output.WriteBytes(bytes.data(), bytes.size()) && output.Flush() && output.Close();
+  return output && output.WriteBytes(bytes.data(), bytes.size()) && output.Flush() &&
+         output.Close();
 }
 
-// Upgrade legacy MP9 icons without touching tickets, other titles, or the save-data directory.
+// Revalidate every owned icon; recover older compatibility conversions from original resources.
 // Retained old content also provides recovery if publication is interrupted between renames.
-static bool RepairMarioParty9Channels(Common::IniFile& ini)
+static bool RepairChannelIcons(Common::IniFile& ini)
 {
+  const size_t heap_size = GetProfileIconHeapSize();
+  auto candidates = GetInstalledForwarders();
+  std::vector<u64> legacy_ids;
+  // These extra IDs only recover quarantine directories created by the older MP9-specific policy.
   for (char region = 'A'; region <= 'Z'; ++region)
   {
     const std::string game_id = std::string("SSQ") + region + "01";
     const u64 id = GenerateForwarderTitleID(game_id);
+    legacy_ids.push_back(id);
+    candidates.try_emplace(id, "");
+  }
+  for (const auto& [id, mapped_path] : candidates)
+  {
     const auto key = fmt::format("{:016x}", id);
     const auto title = Common::GetTitlePath(id, Common::FromWhichRoot::Configured);
     const auto active = title + "/content";
-    const auto backup = title + "/content.before-icon-fix";
+    const auto backup = title + "/content.before-icon-format-2";
     const auto stage = title + "/content.icon-fix";
     std::string source;
-    for (const auto* directory : {"content", "content.before-icon-fix", "content.quarantined"})
+    for (const auto* directory : {"content", "content.before-icon-format-2",
+                                  "content.before-icon-fix", "content.quarantined"})
     {
-      if ((std::string_view(directory) == "content.before-icon-fix" &&
+      if (((std::string_view(directory) == "content.before-icon-fix" ||
+            std::string_view(directory) == "content.before-icon-format-2") &&
            !ini.Exists("IconFix", key)) ||
-          (std::string_view(directory) == "content.quarantined" &&
-           ini.Exists("IconRepaired", key)))
+          (std::string_view(directory) == "content.quarantined" && ini.Exists("IconRepaired", key)))
         continue;
       if (OwnsChannel(id, directory))
       {
@@ -411,8 +423,32 @@ static bool RepairMarioParty9Channels(Common::IniFile& ini)
         !File::ReadFileToString(source + "/title.tmd", metadata))
       return false;
     const auto marker = bytes.rfind("DFWD");
-    const auto prepared = PrepareChannelBanner(
-        game_id, std::span(reinterpret_cast<const u8*>(bytes.data()), marker));
+    int format = 0;
+    ini.GetOrCreateSection("IconFormat")->Get(key, &format, 0);
+    const std::string path = bytes.substr(marker + 4, bytes.size() - marker - 5);
+    std::vector<u8> original;
+    // Restore the full disc icon when upgrading 1.1.1's deliberately simplified tile.
+    if (format < 2)
+    {
+      auto volume = DiscIO::CreateVolume(path);
+      if (volume && volume->GetVolumeType() == DiscIO::Platform::WiiDisc &&
+          GenerateForwarderTitleID(volume->GetGameID(volume->GetGamePartition())) == id)
+        original = ExtractOpeningBnr(*volume, volume->GetGamePartition());
+      if (original.empty() && OwnsChannel(id, "content.before-icon-fix"))
+      {
+        std::string archived;
+        if (File::ReadFileToString(title + "/content.before-icon-fix/00000000.app", archived))
+        {
+          const auto end = archived.rfind("DFWD");
+          if (archived.substr(end + 4) == bytes.substr(marker + 4))
+            original.assign(archived.begin(), archived.begin() + end);
+        }
+      }
+    }
+    const auto input = original.empty() ?
+                           std::span(reinterpret_cast<const u8*>(bytes.data()), marker) :
+                           std::span<const u8>(original);
+    const auto prepared = PrepareChannelBanner("", input, heap_size);
     if (!prepared)
       return false;
     const IOS::ES::TMDReader old_tmd(std::vector<u8>(metadata.begin(), metadata.end()));
@@ -420,10 +456,9 @@ static bool RepairMarioParty9Channels(Common::IniFile& ini)
       return false;
     if (!File::Exists(Common::GetTicketFileName(id, Common::FromWhichRoot::Configured)))
       return false;
-    const std::string path = bytes.substr(marker + 4, bytes.size() - marker - 5);
-    const bool unchanged = source == active && prepared->size() == marker &&
-                           std::equal(prepared->begin(), prepared->end(),
-                                      reinterpret_cast<const u8*>(bytes.data()));
+    const bool unchanged =
+        source == active && prepared->size() == marker &&
+        std::equal(prepared->begin(), prepared->end(), reinterpret_cast<const u8*>(bytes.data()));
     if (!unchanged)
     {
       ini.GetOrCreateSection("IconFix")->Set(key, true);
@@ -435,18 +470,22 @@ static bool RepairMarioParty9Channels(Common::IniFile& ini)
       // Only remove our partial stage after ownership of the original has been established.
       if (File::Exists(stage) && !File::DeleteDirRecursively(stage))
         return false;
-      if (!WriteBytes(stage + "/00000000.app", content) ||
-          !WriteBytes(stage + "/title.tmd", tmd))
+      if (!WriteBytes(stage + "/00000000.app", content) || !WriteBytes(stage + "/title.tmd", tmd))
         return false;
       if (source == active && (File::Exists(backup) || !File::RenameSync(active, backup)))
         return false;
       if (!File::RenameSync(stage, active))
         return false;
-      INFO_LOG_FMT(CORE, "Updated Mario Party 9's channel-grid icon: {}", path);
+      INFO_LOG_FMT(CORE, "Updated channel icon compatibility: {}", path);
     }
     ini.GetOrCreateSection("Forwarders")->Set(key, path);
     ini.DeleteKey("Excluded", key);
     ini.GetOrCreateSection("IconRepaired")->Set(key, true);
+    // An offline 1.1.1 tile can remain usable in its old form. Retry its full-art restoration
+    // when the disc/backup returns instead of marking that migration complete prematurely.
+    if (format >= 2 || !original.empty() ||
+        std::find(legacy_ids.begin(), legacy_ids.end(), id) == legacy_ids.end())
+      ini.GetOrCreateSection("IconFormat")->Set(key, 2);
     ini.DeleteKey("IconFix", key);
   }
   return true;
@@ -513,9 +552,9 @@ bool InstallChannel(const ChannelData& source, bool silent)
   if (AvailableSlots(CountVisibleChannels()) == 0)
     return fail(
         "The Wii Menu is full (48 tiles including the Disc Channel). Remove a channel first.");
-  const auto prepared = PrepareChannelBanner(game_id, source.banner);
+  const auto prepared = PrepareChannelBanner(game_id, source.banner, GetProfileIconHeapSize());
   if (!prepared)
-    return fail("This game's banner is missing or invalid. The game can still be launched from the "
+    return fail("This game's banner cannot be safely prepared for the Wii Menu. Launch it from the "
                 "library.");
   auto content = *prepared;
   const std::string marker = "DFWD" + disc_image_path;
@@ -542,6 +581,7 @@ bool InstallChannel(const ChannelData& source, bool silent)
     return fail("Channel publication failed. Use Tools > Repair Wii Menu Channels to recover.");
   File::DeleteDirRecursively(stage);
   ini.GetOrCreateSection("Forwarders")->Set(key, NormalizePath(disc_image_path));
+  ini.GetOrCreateSection("IconFormat")->Set(key, 2);
   ini.DeleteKey("Pending", key);
   ini.DeleteKey("Excluded", key);
   if (!SaveMappingFile(ini))
@@ -584,7 +624,7 @@ bool RepairChannels()
   }
   const auto* pending = ini.GetSection("Pending");
   if (!pending)
-    return RepairMarioParty9Channels(ini) && SaveMappingFile(ini);
+    return RepairChannelIcons(ini) && SaveMappingFile(ini);
   const auto values = pending->GetValues();
   for (const auto& [key, path] : values)
   {
@@ -610,7 +650,7 @@ bool RepairChannels()
     if (File::Exists(title + ".installing") && !File::DeleteDirRecursively(title + ".installing"))
       return false;
   }
-  return RepairMarioParty9Channels(ini) && SaveMappingFile(ini);
+  return RepairChannelIcons(ini) && SaveMappingFile(ini);
 }
 
 bool UninstallForwarder(u64 title)

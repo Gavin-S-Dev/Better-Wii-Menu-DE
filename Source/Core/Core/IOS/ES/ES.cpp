@@ -538,7 +538,11 @@ bool ESDevice::LaunchForwarderTitle(u64 title_id)
 
 bool ESDevice::BootstrapPPC()
 {
-  const bool result = GetEmulationKernel().BootstrapPPC(m_pending_ppc_boot_content_path);
+  // ES may bootstrap during IOS construction, before the kernel's device map is populated.
+  u64 title = 0;
+  m_core.GetTitleId(&title);
+  const bool result = GetEmulationKernel().BootstrapPPC(m_pending_ppc_boot_content_path,
+                                                        title == Titles::SYSTEM_MENU);
   m_pending_ppc_boot_content_path = {};
   return result;
 }

@@ -180,7 +180,7 @@ public:
   void SetGidForPPC(u16 gid);
   u16 GetGidForPPC() const;
 
-  bool BootstrapPPC(const std::string& boot_content_path);
+  bool BootstrapPPC(const std::string& boot_content_path, bool system_menu = false);
   bool BootIOS(u64 ios_title_id, HangPPC hang_ppc = HangPPC::No,
                const std::string& boot_content_path = {});
   void InitIPC();

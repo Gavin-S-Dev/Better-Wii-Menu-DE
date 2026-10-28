@@ -4,13 +4,9 @@
 #include "Core/WiiBanner.h"
 
 #include <algorithm>
-#include <array>
 #include <cstring>
-#include <map>
-#include <mbedtls/md5.h>
 #include <string>
 
-#include "Common/Align.h"
 #include "Core/WiiForwarder.h"
 
 namespace WiiForwarder
@@ -30,24 +26,10 @@ u16 Read16(View data, size_t offset)
 {
   return (u16(data[offset]) << 8) | data[offset + 1];
 }
-void Put32(Bytes& data, size_t offset, u32 value)
-{
-  for (size_t i = 0; i < 4; ++i)
-    data[offset + i] = static_cast<u8>(value >> (24 - i * 8));
-}
-void Put16(Bytes& data, size_t offset, u16 value)
-{
-  data[offset] = static_cast<u8>(value >> 8);
-  data[offset + 1] = static_cast<u8>(value);
-}
 bool Magic(View data, size_t offset, std::string_view magic)
 {
   return offset <= data.size() && magic.size() <= data.size() - offset &&
          std::memcmp(data.data() + offset, magic.data(), magic.size()) == 0;
-}
-void Append(Bytes& data, View addition)
-{
-  data.insert(data.end(), addition.begin(), addition.end());
 }
 std::string Name(View data)
 {
@@ -92,28 +74,6 @@ std::optional<std::vector<Entry>> Entries(View archive)
     if (offset < first || offset > archive.size() || size > archive.size() - offset)
       return {};
     result.push_back({Name(text), node, offset, size});
-  }
-  return result;
-}
-std::optional<Bytes> Rebuild(View archive, const std::map<std::string, Bytes>& replacements)
-{
-  const auto entries = Entries(archive);
-  if (!entries || entries->empty())
-    return {};
-  const size_t first = Read32(archive, 12);
-  Bytes result(archive.begin(), archive.begin() + first);
-  for (const auto& entry : *entries)
-  {
-    result.resize(Common::AlignUp(result.size(), size_t{32}));
-    const auto replacement = replacements.find(entry.name);
-    const View payload = replacement == replacements.end() ?
-                             archive.subspan(entry.offset, entry.size) :
-                             View(replacement->second);
-    if (payload.size() > MAX_SIZE - result.size())
-      return {};
-    Put32(result, entry.node + 4, static_cast<u32>(result.size()));
-    Put32(result, entry.node + 8, static_cast<u32>(payload.size()));
-    Append(result, payload);
   }
   return result;
 }
@@ -163,15 +123,6 @@ std::optional<Bytes> Unpack(View wrapped)
   }
   return result;
 }
-Bytes Wrap(View data)
-{
-  Bytes result(32);
-  std::memcpy(result.data(), "IMD5", 4);
-  Put32(result, 4, static_cast<u32>(data.size()));
-  mbedtls_md5_ret(data.data(), data.size(), result.data() + 16);
-  Append(result, data);
-  return result;
-}
 std::optional<std::vector<View>> Sections(View data, std::string_view magic)
 {
   if (data.size() < 16 || !Magic(data, 0, magic) || Read32(data, 8) != data.size() ||
@@ -195,116 +146,204 @@ std::optional<std::vector<View>> Sections(View data, std::string_view magic)
     return {};
   return result;
 }
-std::optional<Bytes> SimplifyLayout(View layout)
+
+struct Usage
+{
+  size_t panes = 0, materials = 0, bindings = 0, keys = 0, palettes = 0;
+};
+
+bool CheckLayout(View layout, Usage& usage)
 {
   const auto sections = Sections(layout, "RLYT");
   if (!sections)
-    return {};
-  View lyt, textures, materials, root, bg, logo, start, end, group;
+    return false;
+  size_t depth = 0, textures = 0, materials = 0;
   for (View section : *sections)
   {
-    if (Magic(section, 0, "lyt1"))
-      lyt = section;
-    if (Magic(section, 0, "txl1"))
-      textures = section;
-    if (Magic(section, 0, "mat1"))
-      materials = section;
-    if (Magic(section, 0, "pan1") && root.empty())
-      root = section;
-    if (Magic(section, 0, "pas1") && start.empty())
-      start = section;
-    if (Magic(section, 0, "pae1") && end.empty())
-      end = section;
-    if (Magic(section, 0, "grp1") && group.empty())
-      group = section;
-    if (Magic(section, 0, "pic1") && section.size() == 128)
+    if (Magic(section, 0, "txl1") || Magic(section, 0, "fnl1"))
     {
-      const auto name = Name(section.subspan(12, 16));
-      if (name == "bg")
-        bg = section;
-      if (name == "Picture_61")
-        logo = section;
+      if (section.size() < 12 || Read16(section, 8) > (section.size() - 12) / 8)
+        return false;
+      if (Magic(section, 0, "txl1"))
+        textures = Read16(section, 8);
+      const size_t count = Read16(section, 8);
+      for (size_t i = 0; i < count; ++i)
+      {
+        const size_t offset = Read32(section, 12 + i * 8);
+        if (offset < count * 8 || offset >= section.size() - 12 ||
+            std::find(section.begin() + 12 + offset, section.end(), 0) == section.end())
+          return false;
+      }
+    }
+    if (Magic(section, 0, "mat1"))
+    {
+      if (section.size() < 12)
+        return false;
+      materials = Read16(section, 8);
+      if (materials > 256 || materials > (section.size() - 12) / 4)
+        return false;
+      usage.materials += materials;
+      for (size_t i = 0; i < materials; ++i)
+      {
+        const size_t start = Read32(section, 12 + i * 4);
+        const size_t end = i + 1 < materials ? Read32(section, 12 + (i + 1) * 4) : section.size();
+        if (start < 12 + materials * 4 || start > end || end > section.size() || end - start < 64)
+          return false;
+        const size_t maps = Read32(section, start + 60) & 15;
+        if (maps > 8 || maps > (end - start - 64) / 4)
+          return false;
+        for (size_t map = 0; map < maps; ++map)
+          if (Read16(section, start + 64 + map * 4) >= textures)
+            return false;
+      }
     }
   }
-  if (lyt.empty() || textures.empty() || materials.size() < 12 || root.size() != 76 || bg.empty() ||
-      logo.empty() || start.empty() || end.empty() || group.size() != 28)
-    return {};
-  const size_t count = Read16(materials, 8);
-  if (count == 0 || count > 128 || count > (materials.size() - 12) / 4)
-    return {};
-  Bytes mat(20);
-  std::memcpy(mat.data(), "mat1", 4);
-  Put16(mat, 8, 2);
-  size_t index = 0;
-  for (View picture : {bg, logo})
+  for (View section : *sections)
   {
-    const size_t id = Read16(picture, 92);
-    if (id >= count)
-      return {};
-    const size_t begin = Read32(materials, 12 + id * 4);
-    const size_t finish = id + 1 < count ? Read32(materials, 12 + (id + 1) * 4) : materials.size();
-    if (begin < 12 + count * 4 || begin >= finish || finish > materials.size())
-      return {};
-    Put32(mat, 12 + index++ * 4, static_cast<u32>(mat.size()));
-    Append(mat, materials.subspan(begin, finish - begin));
+    if (Magic(section, 0, "pan1") || Magic(section, 0, "pic1") || Magic(section, 0, "txt1") ||
+        Magic(section, 0, "wnd1") || Magic(section, 0, "bnd1"))
+    {
+      if (section.size() < 76 || ++usage.panes > 512)
+        return false;
+      if (Magic(section, 0, "pic1"))
+      {
+        if (section.size() < 96 || Read16(section, 92) >= materials ||
+            size_t(section[94]) > (section.size() - 96) / 32)
+          return false;
+      }
+      if (Magic(section, 0, "txt1"))
+      {
+        if (section.size() < 116 || Read16(section, 80) >= materials)
+          return false;
+        const size_t offset = Read32(section, 88), length = Read16(section, 78);
+        if (offset > section.size() || length > section.size() - offset)
+          return false;
+      }
+      if (Magic(section, 0, "wnd1"))
+      {
+        if (section.size() < 104)
+          return false;
+        const size_t count = section[92], table = Read32(section, 100);
+        if (table > section.size() || count > (section.size() - table) / 4)
+          return false;
+        for (size_t i = 0; i < count; ++i)
+        {
+          const size_t offset = Read32(section, table + i * 4);
+          if (offset > section.size() - 3 || Read16(section, offset) >= materials)
+            return false;
+        }
+      }
+    }
+    if (Magic(section, 0, "pas1"))
+    {
+      if (++depth > 64)
+        return false;
+    }
+    if (Magic(section, 0, "pae1"))
+    {
+      if (!depth)
+        return false;
+      --depth;
+    }
+    if (Magic(section, 0, "grp1") &&
+        (section.size() < 28 || size_t(Read16(section, 24)) > (section.size() - 28) / 16))
+      return false;
   }
-  Put32(mat, 4, static_cast<u32>(mat.size()));
-  Bytes background(bg.begin(), bg.end()), title(logo.begin(), logo.end());
-  Put16(background, 92, 0);
-  Put16(title, 92, 1);
-  Bytes result(layout.begin(), layout.begin() + 16);
-  for (View section :
-       {lyt, textures, View(mat), root, start, View(background), View(title), end, group})
-    Append(result, section);
-  Put32(result, 8, static_cast<u32>(result.size()));
-  Put16(result, 14, 9);
-  return result;
+  return depth == 0 && usage.panes != 0;
 }
-std::optional<Bytes> SimplifyAnimation(View animation)
+
+bool CheckAnimation(View animation, Usage& usage)
 {
   const auto sections = Sections(animation, "RLAN");
-  if (!sections || sections->size() != 1)
-    return {};
-  const View pai = sections->front();
-  if (pai.size() < 20 || !Magic(pai, 0, "pai1") || Read16(pai, 12) != 0)
-    return {};
-  const size_t count = Read16(pai, 14), table = Read32(pai, 16);
-  if (table < 20 || table > pai.size() || count > (pai.size() - table) / 4)
-    return {};
-  std::vector<View> keep;
-  for (size_t i = 0; i < count; ++i)
+  if (!sections)
+    return false;
+  for (View pai : *sections)
   {
-    const size_t begin = Read32(pai, table + i * 4);
-    const size_t end = i + 1 < count ? Read32(pai, table + (i + 1) * 4) : pai.size();
-    if (begin < table + count * 4 || begin > end || end > pai.size() || end - begin < 24)
-      return {};
-    if (Name(pai.subspan(begin, 20)) == "Picture_61")
-      keep.push_back(pai.subspan(begin, end - begin));
+    if (!Magic(pai, 0, "pai1"))
+      continue;
+    if (pai.size() < 20)
+      return false;
+    const size_t count = Read16(pai, 14), table = Read32(pai, 16), files = Read16(pai, 12);
+    if (table < 20 || table > pai.size() || count > (pai.size() - table) / 4 ||
+        files > (pai.size() - 20) / 4 || files > 64)
+      return false;
+    usage.bindings += count;
+    usage.palettes += files;
+    if (usage.bindings > 512)
+      return false;
+    for (size_t i = 0; i < files; ++i)
+    {
+      const size_t offset = Read32(pai, 20 + i * 4);
+      if (offset >= pai.size() - 20 ||
+          std::find(pai.begin() + 20 + offset, pai.end(), 0) == pai.end())
+        return false;
+    }
+    for (size_t i = 0; i < count; ++i)
+    {
+      const size_t offset = Read32(pai, table + i * 4);
+      if (offset < table + count * 4 || offset > pai.size() || pai.size() - offset < 24)
+        return false;
+      const size_t tags = pai[offset + 20];
+      if (tags > (pai.size() - offset - 24) / 4)
+        return false;
+      for (size_t tag = 0; tag < tags; ++tag)
+      {
+        const size_t relative = Read32(pai, offset + 24 + tag * 4);
+        if (relative > pai.size() - offset || pai.size() - offset - relative < 8)
+          return false;
+        const size_t info = offset + relative, tracks = pai[info + 4];
+        if (tracks > (pai.size() - info - 8) / 4)
+          return false;
+        for (size_t track = 0; track < tracks; ++track)
+        {
+          const size_t key_offset = Read32(pai, info + 8 + track * 4);
+          if (key_offset > pai.size() - info || pai.size() - info - key_offset < 12)
+            return false;
+          const size_t key = info + key_offset, length = Read16(pai, key + 4);
+          const size_t data = Read32(pai, key + 8), stride = pai[key + 2] == 1 ? 8 : 12;
+          if ((pai[key + 2] != 1 && pai[key + 2] != 2) || data < 12 || data > pai.size() - key ||
+              length > (pai.size() - key - data) / stride)
+            return false;
+          usage.keys += length;
+          if (usage.keys > 65536)
+            return false;
+        }
+      }
+    }
   }
-  if (keep.size() != 2)
-    return {};
-  Bytes result(animation.begin(), animation.begin() + 16);
-  Append(result, pai.first(20));
-  result.resize(16 + 20 + keep.size() * 4);
-  for (size_t i = 0; i < keep.size(); ++i)
+  return true;
+}
+
+bool CheckIconBudget(View archive, const std::vector<Entry>& entries, size_t heap_size)
+{
+  if (heap_size != STOCK_ICON_HEAP && heap_size != EXPANDED_ICON_HEAP)
+    return false;
+  Usage usage;
+  bool layout = false;
+  for (const auto& file : entries)
   {
-    Put32(result, 16 + 20 + i * 4, static_cast<u32>(result.size() - 16));
-    Append(result, keep[i]);
+    const auto data = archive.subspan(file.offset, file.size);
+    if (file.name.ends_with(".brlyt"))
+    {
+      if (!CheckLayout(data, usage))
+        return false;
+      layout |= file.name == "icon.brlyt";
+    }
+    if (file.name.ends_with(".brlan") && !CheckAnimation(data, usage))
+      return false;
   }
-  Put32(result, 8, static_cast<u32>(result.size()));
-  Put32(result, 20, static_cast<u32>(result.size() - 16));
-  Put16(result, 30, static_cast<u16>(keep.size()));
-  Put32(result, 32, 20);
-  return result;
+  // Conservative admission estimate, not an assertion that arbitrary guest assets are crash-proof.
+  // Leave headroom for allocator bookkeeping and menu-owned layout objects in the fixed heap.
+  const size_t working = 0x2000 + usage.panes * 0x180 + usage.materials * 0x180 +
+                         usage.bindings * 0x100 + usage.keys * 8 + usage.palettes * 0x200;
+  return layout && working <= heap_size * 7 / 8;
 }
 }  // namespace
 
-std::optional<std::vector<u8>> PrepareChannelBanner(std::string_view game_id, View banner)
+std::optional<std::vector<u8>> PrepareChannelBanner(std::string_view, View banner, size_t heap_size)
 {
   if (!IsBannerSafe(banner))
     return {};
-  if (!game_id.starts_with("SSQ"))
-    return Bytes(banner.begin(), banner.end());
   const auto outer = Entries(banner.subspan(0x600));
   if (!outer)
     return {};
@@ -313,41 +352,11 @@ std::optional<std::vector<u8>> PrepareChannelBanner(std::string_view game_id, Vi
   if (icon == outer->end())
     return {};
   const auto unpacked = Unpack(banner.subspan(0x600 + icon->offset, icon->size));
-  if (!unpacked)
+  if (!unpacked || unpacked->size() > 0x20000 || Read32(banner, 0x4c) != unpacked->size())
     return {};
   const auto inner = Entries(*unpacked);
-  if (!inner)
+  if (!inner || !CheckIconBudget(*unpacked, *inner, heap_size))
     return {};
-  std::map<std::string, Bytes> replacements;
-  for (const auto& file : *inner)
-  {
-    const View data = View(*unpacked).subspan(file.offset, file.size);
-    std::optional<Bytes> replacement;
-    if (file.name == "icon.brlyt")
-      replacement = SimplifyLayout(data);
-    else if (file.name == "icon.brlan")
-      replacement = SimplifyAnimation(data);
-    else
-      continue;
-    if (!replacement)
-      return {};
-    replacements.emplace(file.name, std::move(*replacement));
-  }
-  if (replacements.size() != 2)
-    return {};
-  const auto new_icon = Rebuild(*unpacked, replacements);
-  if (!new_icon)
-    return {};
-  const auto archive = Rebuild(banner.subspan(0x600), {{"icon.bin", Wrap(*new_icon)}});
-  if (!archive)
-    return {};
-  Bytes result(banner.begin(), banner.begin() + 0x600);
-  Put32(result, 0x4c, static_cast<u32>(new_icon->size()));
-  std::fill(result.begin() + 0x5f0, result.end(), 0);
-  mbedtls_md5_ret(result.data(), result.size(), result.data() + 0x5f0);
-  Append(result, *archive);
-  if (!IsBannerSafe(result))
-    return {};
-  return result;
+  return Bytes(banner.begin(), banner.end());
 }
 }  // namespace WiiForwarder
