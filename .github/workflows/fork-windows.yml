@@ -22,6 +22,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { git branch master refs/tags/2609a }
       - name: Prepare local compiler and release runtime
         run: python Tools/setup_fork_compiler.py
+      - name: Check release packaging exclusions
+        run: python -m unittest discover -s Tools/tests -p test_package_fork.py
       - name: Build application and tests
         shell: cmd
         run: build_fork.cmd
@@ -35,4 +37,12 @@ jobs:
           path: |
             dist/*.zip
             dist/*.sha256
+          if-no-files-found: error
+      - name: Upload developer test results separately
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: BetterWiiMenuDE-test-results
+          if-no-files-found: ignore
+          path: |
             build-candidate/test-results.xml
