@@ -1,4 +1,4 @@
-**Better Wii Menu DE 1.3.1 — based on Dolphin 2609a**
+**Better Wii Menu DE 1.3.1 candidate — based on Dolphin 2609a**
 
 Extract the whole ZIP to a writable folder and run `BetterWiiMenuDE.exe`.
 
@@ -18,5 +18,3 @@ Known limits: the expanded heaps require all recognized allocation signatures to
 Developing: initialize Git submodules, use a Windows 10.0.22621+ SDK and CMake/Ninja, and use MSVC 19.51.36252 or newer. `python Tools/setup_fork_compiler.py` extracts hash-pinned Microsoft compiler/runtime packages into a local build folder without installing Visual Studio. `build_fork.cmd` configures/builds the application and C++ tests using that compiler and an existing Visual Studio SDK environment. Run `build-candidate/Binaries/Tests/tests.exe --gtest_filter=BetterWiiMenu*`. `python Tools/package_fork.py` makes a new ZIP with release runtimes and no user/test profiles.
 
 Keep upstream Dolphin's source history and COPYING. No games, personal NAND, keys, controller identity, or private profile are included in the release archive.
-
-Release packaging includes only the application and required runtime data. Logs, test executables, screenshots, private profiles and debug symbols are excluded. The approved glass Wii Menu artwork is included in cover and banner views. Developer packaging checks run with "python -m unittest discover -s Tools/tests -p test_package_fork.py" and are not shipped in the application.
