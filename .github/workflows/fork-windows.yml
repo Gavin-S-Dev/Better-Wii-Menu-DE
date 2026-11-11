@@ -79,4 +79,3 @@ jobs:
           path: |
             build-candidate-build.log
             build-candidate/test-results.xml
-
