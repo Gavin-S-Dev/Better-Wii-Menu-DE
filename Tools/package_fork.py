@@ -99,8 +99,7 @@ def package(root=ROOT):
     version = match.group(1)
     output = root / "dist" / f"BetterWiiMenuDE-{version}-2609a-x64"
     archive = output.parent / (output.name + ".zip")
-    checksum_path = archive.with_suffix(".zip.sha256")
-    for destination in (output, archive, checksum_path):
+    for destination in (output, archive):
         if destination.exists():
             raise RuntimeError(f"Refusing to overwrite existing package: {destination}")
     # Validate inputs before creating output. Never copy an entire build tree.
@@ -123,10 +122,7 @@ def package(root=ROOT):
                 name = path.relative_to(output).as_posix()
                 validate_release_path(name)
                 z.write(path, name)
-    checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
-    checksum_path.write_text(f"{checksum}  {archive.name}\n", encoding="utf-8")
     print(archive)
-    print(checksum)
     return archive
 
 

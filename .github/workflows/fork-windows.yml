@@ -61,14 +61,12 @@ jobs:
       - name: Package candidate
         run: python Tools/package_fork.py
 
-      - name: Upload candidate ZIP and checksum
+      - name: Upload application ZIP
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: BetterWiiMenuDE-windows-candidate
           if-no-files-found: error
-          path: |
-            dist/*.zip
-            dist/*.sha256
+          path: dist/*.zip
 
       - name: Retain build and test diagnostics
         if: always()

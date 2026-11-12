@@ -5,17 +5,21 @@
 A custom Dolphin build that lets disc image files (.rvz, .iso, .wbfs, .gcz, .ciso, .wia) work as channels on the Wii System Menu.
 
 Switching between games has never been easier!
+
 ### Features
 
-- Automatically syncs users' Dolphin game library with the Wii Menu
-
-- Switching between games is now possible with only the Wii Remote
-
-- Right-click any game in the Dolphin menu to manually add/remove games from the Wii Menu
-
-- Visually replicates the same experiences as if game files are .wad in Wii Menu
+- Automatically syncs your Dolphin game library with the Wii Menu.
+- Switch between games using only the Wii Remote.
+- Right-click a game to add it to or remove it from the Wii Menu.
+- Open the Wii Menu directly from your library, with optional automatic startup.
+- Includes fixes for complex channel icons, including Mario Party 9.
 
 ### How to use
-1. Extract the zip
-2. Run `BetterWiiMenuDE.exe`
-3. Load up the Wii Menu or head straight into a game and enjoy easier game switching!
+
+1. [Download the latest Windows build](https://github.com/Gavin-S-Dev/Better-Wii-Menu-DE/releases/latest).
+2. Extract the entire ZIP into a writable folder. Keep the included files together.
+3. Run `BetterWiiMenuDE.exe`.
+4. Open the Wii Menu from your library. If it is missing, follow the region setup prompt.
+5. Add your game folder and configure your Wii Remote in Dolphin's settings.
+
+See [setup and compatibility notes](Readme-BetterWiiMenu.md) for profile settings and channel limits, or [build instructions](docs/Development.md) to build from source.

@@ -1,20 +1,27 @@
-**Better Wii Menu DE 1.3.1 candidate — based on Dolphin 2609a**
+# Better Wii Menu DE 1.3.1
 
-Extract the whole ZIP to a writable folder and run `BetterWiiMenuDE.exe`.
+Based on Dolphin 2609a. Download the Windows ZIP from the [latest release](https://github.com/Gavin-S-Dev/Better-Wii-Menu-DE/releases/latest), extract it into a writable folder, and run `BetterWiiMenuDE.exe`. Keep the EXE and all included files together.
 
-- On Windows, the fork uses `%APPDATA%\Better Wii Menu DE`. On its first normal launch it copies a detected stock Dolphin profile's game folders, settings, controls, saves, and Wii data into that independent location. It never needs stock Dolphin's executable to run. Subsequent launches use the fork's copy; changes in stock Dolphin are not continuously mirrored.
-- Explicit `-u <profile>` overrides automatic import. An empty directory gives a clean first run. `portable.txt` next to the executable uses a local `User` directory and also bypasses import. Keep your existing profile backed up before testing upgrades.
-- The Wii Menu is always the first library entry, including cover view. Double-click it. If the Wii Menu is missing, choose a region to install its system software. You need an internet connection for that path; Tools also retains Dolphin's supported system-update-from-disc and NAND import features.
-- Right-click the Wii Menu tile and enable **Automatically Launch Wii Menu on Startup** to open it automatically on future starts. The option is off by default. An owned window in front of the library displays a three-second countdown; uncheck its startup option to cancel and save auto-launch as disabled until you enable it again from the tile. Closing the countdown window skips that launch without changing the preference. Direct command-line game launches take priority. An empty profile opens region setup after the countdown instead of attempting to boot missing system software.
-- Add your game folder using the normal library settings. Wii disc games are synced while emulation is stopped; the next menu boot sees the channels. Configure an emulated or real Wii Remote in Controller Settings as appropriate for your hardware.
-- The menu has 48 cells including the Disc Channel. Existing installed channels share the remaining 47 cells with custom game tiles. Extra games remain available in the main library. Manual removal is remembered across rescans; manually adding a game again clears its exclusion. Temporarily unavailable drives keep their channels.
-- Help > Check for Fork Updates checks only stable releases in `Gavin-S-Dev/Better-Wii-Menu-DE` on GitHub. It opens the fork releases page for a newer version; it does not install anything automatically. The stock Dolphin update engine and updater executable are excluded. Automatic fork checks can be disabled in General settings.
-- Tools > Repair Wii Menu Channels recovers a journaled interrupted install/removal. Stop emulation before manual channel changes. Existing game save data is preserved when removing a custom tile.
-- Complex channel icons, including Mario Party 9, keep their full original artwork and animation. For recognized Wii Menu code, the fork expands the icon working heap from 32 KiB to 128 KiB and expands both parent allocations and the channel memory pool together. This changes only the loaded executable copy in RAM. The installed Wii system software stays untouched.
-- Every custom channel gets nested layout/animation checks and a conservative memory-budget check before installation and before menu boot. Unsupported or excessive icons are rejected; their games remain available in the library. Older simplified tiles are restored from their original disc or retained content when available, with old content and saves preserved. Manual removal remains respected.
+## Setup
 
-Known limits: the expanded heaps require all recognized allocation signatures to match; unknown menu revisions use the stock budget and reject icons that do not fit. Runtime coverage includes Wii Menu 4.3U and the USA/Asia SSQE01 disc, not every region or modified menu. The full-capacity stress test used 46 copies of the original complex icon under distinct forwarder title IDs, plus Mii and Disc, rather than 46 distinct games. These protections address the reproduced icon-heap failure and malformed structure; they cannot guarantee compatibility with every guest animation or unrelated emulation bug. Use this fork to open its custom NAND: unmodified Dolphin does not supply the expanded icon heaps. A clean Windows VM acceptance pass remains outstanding. Windows is the implementation/test target.
+- Open the Wii Menu entry in your library. If system software is missing, choose a region and follow the setup prompt. Online setup requires an internet connection. Dolphin's disc-update and NAND-import options are also available in Tools.
+- Add your game folders and configure a real or emulated Wii Remote in Controller Settings. Wii disc games sync to the Wii Menu while emulation is stopped.
+- To start directly in the Wii Menu, right-click its library entry and enable **Automatically Launch Wii Menu on Startup**. The three-second countdown lets you cancel. Unchecking its startup option also disables future automatic launches.
 
-Developing: initialize Git submodules, use a Windows 10.0.22621+ SDK and CMake/Ninja, and use MSVC 19.51.36252 or newer. `python Tools/setup_fork_compiler.py` extracts hash-pinned Microsoft compiler/runtime packages into a local build folder without installing Visual Studio. `build_fork.cmd` configures/builds the application and C++ tests using that compiler and an existing Visual Studio SDK environment. Run `build-candidate/Binaries/Tests/tests.exe --gtest_filter=BetterWiiMenu*`. `python Tools/package_fork.py` makes a new ZIP with release runtimes and no user/test profiles.
+## Profiles
 
-Keep upstream Dolphin's source history and COPYING. No games, personal NAND, keys, controller identity, or private profile are included in the release archive.
+On Windows, settings and saves are stored in `%APPDATA%\Better Wii Menu DE`. On its first normal launch, the app copies a detected stock Dolphin profile, including game folders, settings, controls, saves, and Wii data. Later changes in stock Dolphin are not automatically copied.
+
+Use `-u <profile>` to select a different profile. For portable use, create `portable.txt` next to the EXE; the app then uses a local `User` folder. Both options bypass automatic profile import. Back up your existing profile before upgrading.
+
+## Channels and compatibility
+
+- The Wii Menu has 48 cells, including the Disc Channel. Installed channels share the remaining space with game channels. Overflow games remain available in the main library.
+- Right-click a game to add or remove its channel. Manual removals are remembered, and temporarily unavailable drives keep their channels. Removing a custom channel preserves game saves.
+- If a channel change is interrupted, stop emulation and choose **Tools > Repair Wii Menu Channels**.
+- Complex icons, including Mario Party 9, retain their original artwork and animation on supported menus. Unknown menu revisions may reject oversized icons. Compatibility has been checked with Wii Menu 4.3U, Mario Kart Wii, and the USA/Asia Mario Party 9 disc; other games and regions may vary.
+- Use Better Wii Menu DE to open its custom NAND. Stock Dolphin does not include this fork's expanded icon-memory support.
+
+**Help > Check for Fork Updates** opens this project's releases when a newer version is available. Updates are downloaded through your browser.
+
+No games or personal Wii data are included in the download.

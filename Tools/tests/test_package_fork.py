@@ -90,7 +90,7 @@ class ReleasePackagingTests(unittest.TestCase):
             self.package()
         self.assertFalse((self.root / "dist").exists())
 
-    def test_writes_correct_payload_hashes_and_archive_checksum(self):
+    def test_writes_one_download_with_verified_payload(self):
         archive = self.package()
         self.assertEqual(archive.name, "BetterWiiMenuDE-1.3.1-2609a-x64.zip")
         with zipfile.ZipFile(archive) as release:
@@ -100,8 +100,8 @@ class ReleasePackagingTests(unittest.TestCase):
             self.assertEqual(set(release.namelist()), set(manifest["files"]) | {"build-manifest.json"})
             for name, digest in manifest["files"].items():
                 self.assertEqual(hashlib.sha256(release.read(name)).hexdigest(), digest)
-        checksum = archive.with_suffix(".zip.sha256").read_text().split()[0]
-        self.assertEqual(checksum, hashlib.sha256(archive.read_bytes()).hexdigest())
+        self.assertEqual([path.name for path in archive.parent.iterdir() if path.is_file()],
+                         [archive.name])
 
     def test_refuses_to_overwrite_an_existing_archive(self):
         archive = self.root / "dist/BetterWiiMenuDE-1.3.1-2609a-x64.zip"
