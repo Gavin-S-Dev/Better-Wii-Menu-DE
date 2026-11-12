@@ -12,7 +12,6 @@ Switching between games has never been easier!
 - Switch between games using only the Wii Remote.
 - Right-click a game to add it to or remove it from the Wii Menu.
 - Open the Wii Menu directly from your library, with optional automatic startup.
-- Includes fixes for complex channel icons, including Mario Party 9.
 
 ### How to use
 
